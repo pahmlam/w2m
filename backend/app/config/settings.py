@@ -9,7 +9,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="W2M_", env_file=".env", extra="ignore")
 
+    aoi_source_path: Path = Path("backend/app/config/areas/hanoi-pilot-v1.geojson")
     aoi_path: Path = Path("backend/data/aoi.geojson")
+    routing_area_path: Path = Path("backend/data/routing_area.geojson")
+    osm_snapshot_dir: Path = Path("backend/data/osm")
     graph_dir: Path = Path("backend/data/graph")
     speed_profile_path: Path = Path("backend/app/config/speed_profiles/car-v1.yaml")
     buffer_m: Annotated[float, Field(gt=0, allow_inf_nan=False)] = 3000

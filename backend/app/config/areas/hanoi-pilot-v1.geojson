@@ -1,0 +1,21 @@
+{
+  "type": "Feature",
+  "properties": {
+    "area_id": "hanoi-pilot-v1",
+    "scope": "pilot",
+    "source": "Manually defined technical test area",
+    "description": "Small Hanoi test rectangle; not an administrative or Ring Road 3 boundary."
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [105.84, 21.02],
+        [105.86, 21.02],
+        [105.86, 21.04],
+        [105.84, 21.04],
+        [105.84, 21.02]
+      ]
+    ]
+  }
+}

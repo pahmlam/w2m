@@ -93,6 +93,63 @@ Kỳ vọng: health 200; ready và map config 503 `GRAPH_UNAVAILABLE`.
 
 ## Cấu trúc và cấu hình
 
+### Chuẩn bị AOI thử nghiệm — M1
+
+Đã bổ sung nguồn `backend/app/config/areas/hanoi-pilot-v1.geojson`: hình chữ nhật
+WGS84 `[105.84, 21.02, 105.86, 21.04]` dùng thử pipeline tại Hà Nội. Đây chưa phải
+AOI toàn nội đô Vành đai 3 đã được rà soát. Người phát triển đã chạy Ruff thành công,
+51 test backend đạt và CLI xuất đủ ba artifact. Có 11 cảnh báo deprecation từ
+Shapely và TestClient/httpx; chưa xử lý các cảnh báo này.
+
+Từ thư mục gốc, người phát triển chạy:
+
+```sh
+uv run --project backend --locked ruff check backend
+uv run --project backend --locked pytest backend/tests
+PYTHONPATH=backend uv run --project backend --locked python -m scripts.prepare_aoi
+```
+
+CLI tạo `backend/data/aoi.geojson`, `backend/data/routing_area.geojson` và
+`backend/data/aoi.metadata.json`. Buffer mặc định 3.000 m được tính trên
+EPSG:32648; geometry xuất WGS84 `[lon, lat]`. Không tải OSM trong bước này.
+Điểm trên biên AOI được chấp nhận; routing area lớn hơn không làm rộng phạm vi đầu vào.
+
+Metadata đầu ra đã được đọc: AOI khoảng 4,60 km², routing area khoảng 58,62 km²,
+buffer 3.000 m, CRS đo EPSG:32648 và geometry EPSG:4326. Chưa rà soát trực quan
+ranh giới; AOI toàn nội đô và dữ liệu đồ thị thuộc các bước tiếp theo.
+
+Không cần cài thêm dependency hoặc sửa `.env` hiện có để dùng mặc định mới.
+Xem [hướng dẫn dữ liệu](backend/data/README.md) để đổi source, buffer và đường dẫn
+đầu ra. Việc có AOI chưa làm `/ready` hoặc `/api/v1/map/config` trả 200 vì chưa có graph.
+
+### Tải snapshot OSM offline — M1
+
+Người phát triển đã chạy Ruff và 72 test thành công sau sửa retry 500/502/503.
+Tải thật với OSMnx 2.1.1 đã thành công: snapshot `drive-20261106T092834Z` có
+21.129 node và 36.912 cạnh, cutoff `2026-11-06T09:28:34Z`. Manifest ghi 1 lần
+gọi tải và 1 file cache phản hồi. Lần thử trước bị Overpass 502 đầy tải.
+Còn 11 cảnh báo deprecation từ Shapely và TestClient/httpx.
+
+Người phát triển chạy từ thư mục gốc:
+
+```sh
+uv run --project backend --locked ruff check backend
+uv run --project backend --locked pytest backend/tests
+uv sync --project backend --locked --extra data
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.download_osm
+```
+
+Snapshot lưu trong `backend/data/osm/drive-<UTC timestamp>/`: GraphML thô, polygon
+đã truy vấn, cache phản hồi và manifest nguồn/thời điểm/checksum. Lệnh tải mạng
+ô tô có hướng, giữ mọi thành phần và cạnh song song; chưa simplify, lọc SCC hoặc
+tính trọng số. Không ghi đè snapshot có sẵn, không tải OSM từ API hoặc routine CI.
+
+Xem [chi tiết snapshot](backend/data/README.md#snapshot-osm-offline) để chọn thời
+điểm lịch sử, đường dẫn đầu ra và xem quy tắc xử lý lỗi. Graph loader/runtime chưa
+được tích hợp, nên readiness vẫn trả 503 sau khi tải thành công.
+
+### Các thư mục và môi trường
+
 - `backend/app`: FastAPI, cấu hình, request/response models và endpoint chờ tích hợp.
 - `backend/tests`: kiểm tra validation, health/readiness và fixture graph.
 - `backend/data`: AOI/graph sẽ được chuẩn bị ở M1; không commit artifact lớn.
@@ -147,3 +204,5 @@ phát triển chạy, chưa phải kết quả CI hoặc kiểm chứng runtime 
 - Ruff và 26 pytest backend đã đạt; frontend lint/typecheck/build đã đạt. Cảnh báo deprecation TestClient/httpx còn cần theo dõi.
 - Backend đã khởi động và qua smoke test health/readiness/map config; người phát triển xác nhận trang chủ frontend tại `http://localhost:3000` đã hiển thị. M0 hoàn thành local.
 - Cập nhật checklist theo bằng chứng thực tế. Không tạo journal chỉ để ghi kết quả kiểm tra hoặc cập nhật tài liệu, theo AGENTS.md.
+
+- AI code méo phải tôi

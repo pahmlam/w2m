@@ -2,7 +2,7 @@
 
 **Căn cứ:** [Software & Technical Specification v0.2.0](../spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)  
 **Ngày lập:** 2026-11-06  
-**Trạng thái:** M0 hoàn thành theo kết quả kiểm tra local người phát triển cung cấp, xác nhận trang chủ frontend hiển thị và kiểm tra sự hiện diện của Git/hai lockfile. CI chưa được xác minh chạy trên remote. M1–M6 chưa thực hiện.
+**Trạng thái:** M0 hoàn thành local; CI remote chưa được xác minh. M1 đã có AOI thử nghiệm, buffer 3 km và snapshot OSM thật `drive-20261106T092834Z`; Ruff và 72 test backend đạt theo kết quả người phát triển cung cấp. AOI toàn nội đô và tiền xử lý đồ thị M1 chưa hoàn thành; M2–M6 chưa thực hiện.
 
 ## 1. Mục tiêu và các quyết định đã chốt
 
@@ -93,11 +93,24 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 
 **Đầu ra:** bộ đồ thị có phiên bản, đủ dữ liệu để snap, định tuyến và dựng hình học.
 
+**Tiến độ bước AOI:**
+
+- [x] Định nghĩa nguồn polygon nhỏ `hanoi-pilot-v1.geojson` trong config để theo dõi phiên bản; đây là AOI kỹ thuật thử nghiệm, chưa phải ranh giới AOI toàn nội đô đã được rà soát.
+- [x] Viết validation GeoJSON, kiểm tra biên bằng `covers`, buffer EPSG:32648, CLI xuất geometry/metadata và các test offline.
+- [x] Người phát triển chạy Ruff, pytest và CLI: Ruff đạt, 51 test đạt (25 AOI + 26 nền tảng), CLI xuất đủ AOI/routing area/metadata. Đã đọc metadata đầu ra: CRS đo EPSG:32648, geometry EPSG:4326, buffer 3.000 m, boundary `covers`; chưa rà soát bản đồ trực quan hoặc ranh giới toàn nội đô.
+
 - [ ] Tạo polygon AOI hợp lệ; rà soát ranh giới theo phạm vi nội đô đã chọn. Dùng vùng nhỏ để thử trước, dùng AOI đầy đủ khi nghiệm thu.
 - [ ] Quy định điểm nằm trên biên AOI được chấp nhận; dùng cùng quy tắc ở backend và frontend.
-- [ ] Tạo `ROUTING_AREA` bằng buffer trên EPSG:32648.
-- [ ] Tải dữ liệu OSM offline bằng cấu hình `drive`; lưu nguồn, thời điểm dữ liệu và thông tin tái tạo.
-- [ ] Dựng MultiDiGraph có hướng; giữ đúng đường một chiều và cạnh song song.
+- [x] Tạo `ROUTING_AREA` bằng buffer trên EPSG:32648 cho AOI thử nghiệm. Artifact đã được CLI xuất với buffer 3.000 m; diện tích AOI khoảng 4,60 km², routing area khoảng 58,62 km² theo metadata. Cần sinh lại khi thay AOI đầy đủ.
+**Tiến độ bước tải OSM:**
+
+- [x] Viết `scripts.download_osm` tải `drive` chưa simplify, giữ mọi thành phần và cạnh song song; lưu GraphML, polygon truy vấn, cache phản hồi và manifest có cutoff/checksum. Thêm test giả lập OSMnx, không gọi mạng trong CI.
+- [x] Bản tải ban đầu qua Ruff và 64 test backend theo output người phát triển; optional extra data cài thành công với OSMnx 2.1.1.
+- [x] Bổ sung retry HTTP 500/502/503 tối đa 4 lần gọi tải, backoff 10/20/40 giây, giữ cutoff/cache; thêm test giả lập retry và cleanup.
+- [x] Người phát triển chạy lại Ruff/pytest sau sửa retry: Ruff đạt, 72/72 test đạt (11 cảnh báo deprecation). Tải thật thành công với OSMnx 2.1.1; đã đọc manifest `drive-20261106T092834Z`: cutoff `2026-11-06T09:28:34Z`, 21.129 node, 36.912 cạnh, WGS84, 1 lần gọi tải và 1 file cache phản hồi. Snapshot được script nạp lại trước khi công bố; chưa xác minh đồ thị production.
+
+- [x] Tải dữ liệu OSM offline bằng cấu hình `drive`; lưu nguồn, thời điểm dữ liệu và thông tin tái tạo. Snapshot thật nằm tại `backend/data/osm/drive-20261106T092834Z/`, có GraphML, polygon, cache và manifest/checksum.
+- [x] Dựng MultiDiGraph thô có hướng; giữ cấu trúc một chiều và cạnh song song qua GraphML. Snapshot đã được lưu/nạp lại bằng OSMnx; chưa simplify, chiếu hệ tọa độ, gán trọng số hoặc lọc SCC.
 - [ ] Chuẩn hóa hình học cạnh theo chiều `u → w`; đo lại chiều dài trên EPSG:32648.
 - [ ] Cài đặt speed profile: tra `highway`, lấy tốc độ thấp nhất khi là danh sách, dùng `default` khi không nhận diện được.
 - [ ] Cài đặt parser `maxspeed`: km/h, mph, danh sách, dữ liệu chữ hoặc không hợp lệ; chỉ dùng làm cận trên.
