@@ -111,3 +111,36 @@ không chứa vị trí do người dùng gửi lên ứng dụng.
 Tham khảo: [OSMnx graph_from_polygon](https://osmnx.readthedocs.io/en/stable/user-reference.html#osmnx.graph.graph_from_polygon),
 [OSMnx save/load GraphML](https://osmnx.readthedocs.io/en/stable/user-reference.html#osmnx.io.save_graphml),
 [OSMnx settings](https://osmnx.readthedocs.io/en/stable/user-reference.html#osmnx.settings-module).
+
+## Chuẩn hóa hình học offline — M1
+
+Sau khi cài extra `data`, chạy từ thư mục gốc (không gọi mạng):
+
+```sh
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_graph_geometry \
+  --snapshot-dir backend/data/osm/drive-20261106T092834Z \
+  --output-dir backend/data/geometry/drive-20261106T092834Z-utm-v1
+```
+
+CLI kiểm tra checksum snapshot, xử lý trên bản sao và xuất thư mục mới sau khi
+kiểm tra GraphML nạp lại. Không ghi đè snapshot hoặc thư mục đầu ra đã tồn tại.
+
+- Node giữ WGS84 trong `lon/lat`; `x/y` và geometry cạnh dùng EPSG:32648.
+- Cạnh thiếu geometry được nối từ hai đầu mút; geometry có sẵn giữ đường cong,
+  đảo thứ tự tọa độ khi cần để theo chiều nguồn → đích.
+- Hai đầu geometry phải khớp node trong ngưỡng 0,01 m; sai lệch nhỏ trong ngưỡng
+  được đưa về đúng tọa độ node để ghép tuyến không có khe hở.
+- `length_m` và `length` đều là chiều dài hình học đã chiếu, đơn vị mét.
+  Dữ liệu sai CRS, tọa độ lỗi, geometry rỗng/sai kiểu/sai đầu mút hoặc chiều dài
+  không dương sẽ báo lỗi kèm node/cạnh; không âm thầm bỏ cạnh.
+- Giữ nguyên hướng, cạnh song song, thuộc tính OSM và topology.
+- `metadata.json` ghi stage `geometry-only`, checksum nguồn/đầu ra, CRS, số
+  node/cạnh, thống kê chiều dài và attribution/license của snapshot.
+
+Đã chạy trên snapshot thật: 21.129 node, 36.912 cạnh; chiều dài nhỏ nhất
+0,094 m, lớn nhất 1.170,781 m. Ruff và 94 test backend đạt, gồm 22 test mới;
+test roundtrip OSMnx được bỏ qua nếu môi trường chưa cài extra `data`.
+Có 18 cảnh báo deprecation Shapely/TestClient trong lần chạy này.
+
+Artifact này chưa lọc SCC, gán tốc độ/thời gian, chia cạnh hoặc xuất CSR.
+Chưa tích hợp runtime và không làm readiness chuyển sang 200.

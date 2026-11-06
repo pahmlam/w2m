@@ -2,7 +2,7 @@
 
 **Căn cứ:** [Software & Technical Specification v0.2.0](../spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)  
 **Ngày lập:** 2026-11-06  
-**Trạng thái:** M0 hoàn thành local; CI remote chưa được xác minh. M1 đã có AOI thử nghiệm, buffer 3 km và snapshot OSM thật `drive-20261106T092834Z`; Ruff và 72 test backend đạt theo kết quả người phát triển cung cấp. AOI toàn nội đô và tiền xử lý đồ thị M1 chưa hoàn thành; M2–M6 chưa thực hiện.
+**Trạng thái:** M0 hoàn thành local; CI remote chưa được xác minh. M1 đã có AOI thử nghiệm, buffer 3 km và snapshot OSM thật `drive-20261106T092834Z`; Đã chuẩn hóa hình học EPSG:32648 trên snapshot thật; Ruff và 94 test backend đạt trong task chuẩn hóa hình học. AOI toàn nội đô và các bước tiền xử lý đồ thị M1 còn lại chưa hoàn thành; M2–M6 chưa thực hiện.
 
 ## 1. Mục tiêu và các quyết định đã chốt
 
@@ -111,7 +111,7 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 
 - [x] Tải dữ liệu OSM offline bằng cấu hình `drive`; lưu nguồn, thời điểm dữ liệu và thông tin tái tạo. Snapshot thật nằm tại `backend/data/osm/drive-20261106T092834Z/`, có GraphML, polygon, cache và manifest/checksum.
 - [x] Dựng MultiDiGraph thô có hướng; giữ cấu trúc một chiều và cạnh song song qua GraphML. Snapshot đã được lưu/nạp lại bằng OSMnx; chưa simplify, chiếu hệ tọa độ, gán trọng số hoặc lọc SCC.
-- [ ] Chuẩn hóa hình học cạnh theo chiều `u → w`; đo lại chiều dài trên EPSG:32648.
+- [x] Chuẩn hóa hình học cạnh theo chiều `u → w`; đo lại chiều dài trên EPSG:32648. Module `graph_geometry` và CLI `scripts.prepare_graph_geometry` đã qua Ruff, 94 test backend (22 test mới); chạy offline trên snapshot thật và kiểm tra GraphML sau nạp lại. Artifact `backend/data/geometry/drive-20261106T092834Z-utm-v1/` giữ nguyên 21.129 node/36.912 cạnh; chiều dài từ 0,094 đến 1.170,781 m, đều dương. Đây mới là artifact hình học, chưa phải graph production.
 - [ ] Cài đặt speed profile: tra `highway`, lấy tốc độ thấp nhất khi là danh sách, dùng `default` khi không nhận diện được.
 - [ ] Cài đặt parser `maxspeed`: km/h, mph, danh sách, dữ liệu chữ hoặc không hợp lệ; chỉ dùng làm cận trên.
 - [ ] Kiểm tra chiều dài, tốc độ và thời gian cạnh hữu hạn, dương; báo cáo dữ liệu bị loại hoặc phải sửa.
@@ -429,4 +429,4 @@ Các mục này chưa được tính là đã thực hiện trong kế hoạch l
 
 MVP cung cấp gợi ý điểm gặp theo mô hình thời gian tĩnh. Chất lượng định tuyến còn phụ thuộc dữ liệu OSM, speed profile, snapping và việc chưa xét cấm rẽ/chi phí rẽ. Việc dùng như công cụ chỉ đường cần hoàn thành phần Routing Quality của Phase 3.
 
-M0 hoàn thành local. Người phát triển xác nhận frontend install, audit (0 vulnerabilities), lint, typecheck, production build và trang chủ hiển thị với Next.js 16.4.5. Backend Ruff và 26 pytest đạt trên Python 3.12.13; có một cảnh báo deprecation TestClient/httpx. Smoke test HTTP backend đạt: health 200, ready/map config 503 đúng kỳ vọng khi chưa có graph. Git và hai lockfile đã tồn tại; chưa xác minh remote CI hoặc thực hiện commit. M1–M6 và toàn bộ nghiệm thu MVP vẫn để mở.
+M0 hoàn thành local. Người phát triển xác nhận frontend install, audit (0 vulnerabilities), lint, typecheck, production build và trang chủ hiển thị với Next.js 16.4.5. Backend Ruff và 26 pytest đạt trên Python 3.12.13; có một cảnh báo deprecation TestClient/httpx. Smoke test HTTP backend đạt: health 200, ready/map config 503 đúng kỳ vọng khi chưa có graph. Git và hai lockfile đã tồn tại; chưa xác minh remote CI hoặc thực hiện commit. M1 đã có AOI thử nghiệm, snapshot OSM thật và artifact chuẩn hóa hình học EPSG:32648 (Ruff và 94 test đạt); các phần M1 còn lại, M2–M6 và toàn bộ nghiệm thu MVP vẫn để mở.
