@@ -1,0 +1,21 @@
+# Initial assumptions from specification 0.2.0; not calibrated ETA data.
+weight_profile_version: car-v1
+travel_mode: car
+unit: kmh
+speeds:
+  motorway: 60
+  trunk: 40
+  primary: 30
+  secondary: 25
+  tertiary: 22
+  motorway_link: 25
+  trunk_link: 25
+  primary_link: 25
+  secondary_link: 25
+  tertiary_link: 25
+  residential: 18
+  living_street: 18
+  service: 12
+  unclassified: 12
+  default: 15
+maxspeed_cap: true
