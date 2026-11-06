@@ -19,4 +19,4 @@ backend/data/*
 !backend/data/.gitkeep
 !backend/data/README.md
 outputs/
-
+/frontend/next-env.d.ts
