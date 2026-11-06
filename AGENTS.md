@@ -32,7 +32,7 @@ W2M is a web app for finding fair, efficient meeting points for four people in H
 ## Development journal — mandatory
 
 - **After any coding task that changes repository files, and before the final response, explicitly open, read, and follow `docs/journals/AGENTS.md` in full.** Do not rely on automatic nested-instruction discovery: this is the journal rules file, **not** the output directory.
-- Create **exactly one new journal per task** under `docs/journals/`, following that file's naming, Vietnamese writing, structure, and verification requirements. Never append to or modify historical journals unless explicitly requested.
+- Create **exactly one new journal per task** under `docs/journals/`, following that file's naming, Vietnamese writing, structure, and verification requirements. Never append to or modify historical journals unless explicitly requested. Journal should be what code have done, not result, not writing docs. Ask the owner wether to write journal or not.
 - Do not create a journal for tasks with no actual repository changes or solely for journal maintenance, as specified by the journal rules.
 - In the final task response, state the changes, actual verification results, remaining limitations (if any), and the new journal's path. A coding task is not finished until its required journal is written.
 - Always tick the checklist in plan file whenever done task.

@@ -62,8 +62,8 @@ API tương ứng `10.8 / 11.3 / 11.9`.
 
 ## 4. Request và rerank
 
-Giữ request tạo mới theo mục 7.1. Thiếu `optimization` dùng mặc định spec;
-nếu có thì các trường thiếu cũng dùng mặc định runtime từ Settings. Khi không
+Giữ request tạo mới theo mục 7.1. Thiếu `optimization` hoặc thiếu trường trong
+optimization thì dùng mặc định runtime từ Settings. Khi không
 ghi đè môi trường, các giá trị theo v0.2.0; map config phải dùng cùng Settings.
 
 Rerank dùng body đầy đủ về mặt cấu trúc như sau (không gửi lại origins):

@@ -2,7 +2,7 @@
 
 **Căn cứ:** [Software & Technical Specification v0.2.0](../spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)  
 **Ngày lập:** 2026-11-06  
-**Trạng thái:** Đã viết khung M0; chờ người phát triển sinh lockfile và chạy xác minh. M1–M6 chưa thực hiện.
+**Trạng thái:** M0 hoàn thành theo kết quả kiểm tra local người phát triển cung cấp, xác nhận trang chủ frontend hiển thị và kiểm tra sự hiện diện của Git/hai lockfile. CI chưa được xác minh chạy trên remote. M1–M6 chưa thực hiện.
 
 ## 1. Mục tiêu và các quyết định đã chốt
 
@@ -71,21 +71,23 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 **Đầu ra:** môi trường phát triển tái lập được và hợp đồng dữ liệu rõ ràng.
 
 - [x] Khởi tạo cấu trúc backend FastAPI và frontend Next.js/TypeScript theo đặc tả.
-- [ ] Thiết lập Git, `.gitignore`; loại môi trường ảo, cache, secret và dữ liệu đồ thị lớn khỏi source control. Đã viết `.gitignore`; người phát triển cần chạy `git init`.
-- [ ] Chọn phiên bản runtime tương thích và khóa dependency cho cả backend, frontend. Đã chọn Python 3.12/Node 22 và viết manifest; chờ sinh `uv.lock` và `package-lock.json`.
+- [x] Thiết lập Git, `.gitignore`; cấu hình bỏ qua môi trường ảo, cache, secret và dữ liệu đồ thị lớn. Đã kiểm tra `.git` và nội dung `.gitignore`; không thực hiện commit trong task này.
+- [x] Chọn phiên bản runtime tương thích và khóa dependency cho cả backend, frontend. Python 3.12/Node 22 được chọn; `backend/uv.lock` và `frontend/package-lock.json` đã có. Backend chạy `--locked`, frontend install/audit/lint/typecheck/build đạt theo output người phát triển.
 - [x] Thiết lập lệnh chạy dev, kiểm thử, lint, typecheck và build.
 - [x] Khai báo cấu hình AOI, buffer, speed profile, snap, access speed, cutoff, cache và URL backend.
 - [x] Tạo cấu hình môi trường mẫu; mô tả biến bắt buộc, mặc định và cách cấp giá trị.
 - [x] Định nghĩa request/response theo mục 7 của đặc tả; cập nhật các quy tắc chuẩn hóa tại [bổ sung M0](../spec/W2M-M0-Contract-Addendum.md).
 - [x] Chuẩn bị đồ thị kiểm thử nhỏ: đường một chiều, cạnh song song, hai chiều có tốc độ khác nhau, nguồn trùng và node không tới được.
-- [x] Thiết lập CI chạy kiểm thử nhỏ, lint, typecheck và build; không tải OSM trực tiếp trong CI thông thường. Workflow chờ lockfile để chạy được.
+- [x] Thiết lập CI chạy kiểm thử nhỏ, lint, typecheck và build; không tải OSM trực tiếp trong CI thông thường. Hai lockfile đã có; chưa xác minh workflow trên remote.
 - [x] Viết hướng dẫn khởi động môi trường phát triển.
 
 **Cổng nghiệm thu M0**
 
-- [ ] Backend khởi động được; frontend build được.
-- [ ] Các kiểm tra nền tảng chạy bằng lệnh được ghi trong tài liệu.
-- [ ] Hợp đồng API và các quyết định bổ sung không còn mâu thuẫn đã biết.
+- [x] Backend khởi động được; frontend build được. Frontend production build đã đạt với Next.js 16.4.5; Uvicorn startup thành công, `/health` trả 200, `/ready` và `/api/v1/map/config` trả 503 `GRAPH_UNAVAILABLE` đúng kỳ vọng M0. Request ID header/body lỗi khớp nhau theo output người phát triển cung cấp ngày 2026-11-06.
+- [x] Các kiểm tra nền tảng chạy bằng lệnh được ghi trong tài liệu. Người phát triển xác nhận Ruff, 26 pytest, frontend lint/typecheck/build đạt; audit 0 vulnerabilities.
+- [x] Hợp đồng API và các quyết định bổ sung đã được rà soát ở phạm vi M0, ghi rõ tại [bổ sung M0](../spec/W2M-M0-Contract-Addendum.md). Các kiểm tra nền tảng đã đạt; thuật toán và TC-01–TC-16 vẫn thuộc các mốc sau, không được coi là đã triển khai.
+
+**Xác nhận bổ sung:** người phát triển xác nhận trang chủ frontend tại `http://localhost:3000` đã hiển thị. M0 hoàn thành ở môi trường local; cảnh báo deprecation TestClient/httpx còn được theo dõi.
 
 ### M1 — Dữ liệu bản đồ và đồ thị offline
 
@@ -414,4 +416,4 @@ Các mục này chưa được tính là đã thực hiện trong kế hoạch l
 
 MVP cung cấp gợi ý điểm gặp theo mô hình thời gian tĩnh. Chất lượng định tuyến còn phụ thuộc dữ liệu OSM, speed profile, snapping và việc chưa xét cấm rẽ/chi phí rẽ. Việc dùng như công cụ chỉ đường cần hoàn thành phần Routing Quality của Phase 3.
 
-Khung M0 đã được viết. Chưa chạy cài đặt, lint, test, typecheck, build hoặc smoke test theo yêu cầu người phát triển tự chạy lệnh. Các cổng nghiệm thu vẫn chưa được đánh dấu đạt; xem lệnh xác minh trong README.
+M0 hoàn thành local. Người phát triển xác nhận frontend install, audit (0 vulnerabilities), lint, typecheck, production build và trang chủ hiển thị với Next.js 16.4.5. Backend Ruff và 26 pytest đạt trên Python 3.12.13; có một cảnh báo deprecation TestClient/httpx. Smoke test HTTP backend đạt: health 200, ready/map config 503 đúng kỳ vọng khi chưa có graph. Git và hai lockfile đã tồn tại; chưa xác minh remote CI hoặc thực hiện commit. M1–M6 và toàn bộ nghiệm thu MVP vẫn để mở.

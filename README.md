@@ -2,8 +2,13 @@
 
 Ứng dụng tìm điểm gặp cho 4 người trên mạng đường có hướng tại Hà Nội.
 
-**Hiện trạng:** khung M0 đã được viết; chưa cài dependency, sinh lockfile hoặc chạy
-kiểm tra. Chưa có dữ liệu OSM, bản đồ tương tác hoặc thuật toán tìm điểm gặp.
+**Hiện trạng:** M0 hoàn thành ở môi trường local. Người phát triển xác nhận frontend install,
+audit (0 vulnerabilities), lint, typecheck và production build đạt với Next.js 16.4.5.
+Backend đã qua Ruff và 26 test với Python 3.12.13; có một cảnh báo deprecation
+TestClient/httpx. Người phát triển đã xác nhận Uvicorn khởi động và smoke test HTTP
+backend đạt: health 200, ready/map config 503 đúng kỳ vọng; trang chủ frontend đã
+hiển thị. Git và hai lockfile đã có; remote CI chưa được xác minh. Chưa có dữ liệu
+OSM, bản đồ tương tác hoặc thuật toán tìm điểm gặp.
 
 - [Đặc tả v0.2.0](docs/spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)
 - [Kế hoạch MVP và checklist](docs/plans/W2M-MVP-Plan.md)
@@ -102,7 +107,7 @@ rà soát attribution/điều khoản khi triển khai bản đồ ở M5.
 Không log request body hoặc tọa độ chính xác. Lỗi validation trả thông báo tổng quát
 và request ID. Cache, AOI validation và thuật toán thuộc M1–M4; Docker thuộc M6.
 
-## Cổng M0 còn chờ
+## Kết quả M0 và theo dõi
 
 ### Cập nhật bảo mật dependency frontend
 
@@ -132,11 +137,13 @@ npm --prefix frontend run build
 
 `npm install` sẽ cập nhật lockfile hiện tại; không xóa lockfile hoặc dùng
 `audit fix --force`. Commit `frontend/package.json` và lockfile sau khi kiểm tra.
-Chưa có kết quả chạy các lệnh này sau sửa manifest.
+Người phát triển đã cung cấp output xác nhận toàn bộ các lệnh trên chạy thành công:
+audit báo 0 vulnerabilities; lint/typecheck/build đạt. Đây là kết quả local do người
+phát triển chạy, chưa phải kết quả CI hoặc kiểm chứng runtime bản đồ.
 
-### Các bước nghiệm thu còn lại
+### Trạng thái nghiệm thu
 
-- Sinh/commit lockfile và khởi tạo Git.
-- Cài dependency, chạy lint/test/typecheck/build.
-- Khởi động hai ứng dụng và xác minh health/readiness/trang chủ.
-- Sau khi có kết quả thật, cập nhật checklist và journal tương ứng.
+- Git và hai lockfile đã tồn tại; backend đã chạy thành công với `--locked`. Chưa thực hiện commit hoặc xác minh remote CI trong task này.
+- Ruff và 26 pytest backend đã đạt; frontend lint/typecheck/build đã đạt. Cảnh báo deprecation TestClient/httpx còn cần theo dõi.
+- Backend đã khởi động và qua smoke test health/readiness/map config; người phát triển xác nhận trang chủ frontend tại `http://localhost:3000` đã hiển thị. M0 hoàn thành local.
+- Cập nhật checklist theo bằng chứng thực tế. Không tạo journal chỉ để ghi kết quả kiểm tra hoặc cập nhật tài liệu, theo AGENTS.md.
