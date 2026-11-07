@@ -211,3 +211,92 @@ Kết quả local đã xác minh từ metadata artifact weighted: 21.129 node, 3
 0 cạnh lỗi/bị loại. P50/P99/max thời gian cạnh: 2,927/22,924/140,494 giây.
 Checksum graph đầu ra, profile lưu kèm, graph và metadata nguồn đã được đối chiếu.
 Max vượt 60 giây là đầu vào cho bước chia cạnh tiếp theo, chưa đạt tiêu chí sau chia.
+
+## Lọc thành phần liên thông mạnh lớn nhất — M1
+
+Sau bước trọng số, chạy offline từ thư mục gốc với extra `data` đã cài:
+
+```sh
+uv run --project backend --locked --extra data ruff check backend
+uv run --project backend --locked --extra data pytest backend/tests
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_graph_scc \
+  --weighted-dir backend/data/weighted/drive-20261106T092834Z-car-v1 \
+  --aoi backend/data/aoi.geojson \
+  --output-dir backend/data/scc/drive-20261106T092834Z-car-v1-scc-v2
+```
+
+Chọn thư mục đầu ra mới nếu đích đã tồn tại. CLI không tải OSM, không sửa artifact
+nguồn. Kiểm tra checksum graph/profile, phiên bản, số node/cạnh và trọng số trước
+khi lọc. SCC lớn nhất tính theo số node trên toàn routing area; nếu hòa, chọn SCC
+có node ID nhỏ nhất. Giữ nguyên cạnh song song, chiều đi, hình học và trọng số.
+
+Artifact chỉ công bố sau khi GraphML được nạp lại và kiểm tra liên thông mạnh,
+node/cạnh, tọa độ, hình học và các trường số:
+
+- `graph.graphml`: đồ thị giữ lại, EPSG:32648.
+- `speed_profile.yaml`: profile nguồn lưu kèm.
+- `aoi.geojson`: bản sao AOI dùng cho báo cáo.
+- `removed_in_aoi.geojson`: FeatureCollection WGS84 `[lon, lat]`, gồm node bị loại
+  trong/trên biên AOI và hình học cạnh bị loại đã cắt theo AOI. Gồm cả cạnh đi qua
+  AOI dù hai đầu nằm ngoài; bỏ giao chỉ là điểm. Thuộc tính `kind` phân biệt node
+  và edge; edge có source/target/key để truy vết. Có thể nạp vào QGIS cùng AOI để
+  rà soát tác động snapping. Đây là dữ liệu đường OSM, không phải vị trí người dùng.
+- `metadata.json`: checksum nguồn/đầu ra, stage `scc`, số SCC, số node/cạnh đầu vào,
+  giữ lại, bị loại, số feature trong AOI và P50/P99/max thời gian cạnh sau lọc.
+
+Các bộ đếm tốc độ default/maxspeed của graph trước lọc không được dùng làm thống
+kê SCC; có thể tra chúng trong metadata weighted nguồn được liên kết bằng checksum.
+
+Đã chạy local ngày 2026-11-07: Ruff đạt, 193 test backend đạt, không bỏ qua test
+(45 cảnh báo deprecation Shapely/TestClient). Snapshot có 443 SCC; giữ 20.162/21.129
+node và 35.466/36.912 cạnh; loại 967 node, 1.446 cạnh. Báo cáo AOI có 29 node và
+37 feature cạnh; geometry hợp lệ. Đã đối chiếu checksum và toàn bộ thuộc tính
+node/cạnh giữ lại với graph nguồn. Chưa rà soát trực quan các vùng bị loại.
+
+Đây vẫn là graph trung gian: chưa nhận diện cặp cạnh ngược cùng đoạn đường,
+chia cạnh trên 60 giây, gắn cờ ứng viên hoặc xuất CSR; `tau_max` vẫn 140,494 giây.
+Backend runtime chưa được tích hợp, readiness vẫn 503.
+
+## Nhận diện cặp cạnh ngược cùng đoạn đường — M1
+
+Chạy từ thư mục gốc, sử dụng graph SCC đã có và extra `data`:
+
+```sh
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_reverse_edges \
+  --scc-dir backend/data/scc/drive-20261106T092834Z-car-v1-scc-v2 \
+  --output-dir backend/data/reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1
+```
+
+Chọn thư mục đích mới khi chạy lại. CLI kiểm tra stage, checksum, số node/cạnh,
+profile version và liên thông mạnh; không tải mạng hoặc thay đổi graph SCC.
+Đầu ra là mapping đi kèm graph nguồn, không sao chép GraphML:
+
+- `reverse_edges.json`: `pairs` và `unpaired`, phủ toàn bộ cạnh nguồn đúng một lần.
+- `metadata.json`: checksum graph/metadata nguồn và mapping, snapshot/profile,
+  số cặp, số cạnh ghép/không ghép và thống kê lý do.
+
+Mỗi cặp có `forward: [u, v, key]`, `reverse: [v, u, reverse_key]`; `forward` chỉ là
+chiều có source ID nhỏ hơn để xuất tất định. Không có ý nghĩa ưu tiên chiều chạy.
+Cạnh không ghép có `edge`, `reason`, `candidates` (danh sách cạnh phù hợp nếu mơ hồ).
+Bước chia cạnh sau phải đọc cả graph SCC và mapping, kiểm tra checksum graph nguồn
+trước khi sử dụng. Không dùng mapping cho graph khác hoặc suy luận ngược chỉ từ endpoint.
+
+Điều kiện ghép:
+
+- Đảo đầu mút, cả hai có `oneway: false`, cùng tập `osmid` nguyên dương.
+- Khớp layer/level/bridge/tunnel; mặc định layer 0, bridge/tunnel không có tương
+  đương `no`/`false`/`0`. Không dựa vào tên đường, edge key hay thời gian cạnh.
+- Geometry EPSG:32648 theo đúng chiều, cùng chuỗi tọa độ khi đảo chiều trong 0,01 m.
+- Mỗi cạnh có đúng một ứng viên và ứng viên đó cũng chỉ khớp với cạnh này.
+
+Không ghép tùy ý khi trùng nhiều cạnh: `ambiguous` phải rà soát trước khi chia
+chung node. Lý do khác gồm `oneway`, `unknown_oneway`, `missing_or_invalid_osmid`,
+`self_loop`, `no_compatible_reverse`. Self-loop và hình học cùng đường nhưng khác
+số điểm lấy mẫu được giữ không ghép; không tự bổ sung chiều đi hoặc sửa hình học.
+Hình học không hợp lệ, sai chiều hoặc sai CRS làm CLI dừng.
+
+Đã chạy ngày 2026-11-07: 13.803 cặp (27.606 cạnh), 7.860 cạnh không ghép đều
+one-way, không ca mơ hồ. Đã đối chiếu độc lập mọi cặp về osmid, hướng, structure
+tags, geometry và phủ đủ 35.466 cạnh, đồng thời xác minh checksum nguồn/đầu ra.
+Ruff đạt, toàn bộ 223 test backend đạt (30 test mới), không bỏ qua; 45 cảnh báo
+deprecation Shapely/TestClient vẫn còn. Chưa thực hiện chia cạnh dài hoặc snapping.

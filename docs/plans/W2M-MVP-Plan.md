@@ -6,6 +6,13 @@
 
 ## 1. Mục tiêu và các quyết định đã chốt
 
+**Cập nhật 2026-11-07:** bước lọc SCC M1 đã hoàn thành trên AOI thử nghiệm: Ruff và
+193 test backend đạt; artifact SCC giữ 20.162 node/35.466 cạnh, có thống kê và
+GeoJSON phần bị loại trong AOI. Nhận diện cạnh ngược đã hoàn thành: 13.803 cặp,
+7.860 cạnh một chiều, không có ca mơ hồ trong snapshot hiện tại; toàn bộ 223 test
+backend và Ruff đạt. Chưa rà soát trực quan, chia cạnh hoặc xuất CSR;
+M1 và các cổng nghiệm thu tiếp theo vẫn chưa hoàn thành.
+
 Hoàn thành ứng dụng chạy đầy đủ bằng Docker trên máy local: người dùng đặt 4 vị trí tại Hà Nội, tìm tối đa 5 điểm gặp và xem 4 tuyến đường tương ứng. Ứng dụng phải vượt các kiểm thử chức năng, tính đúng đắn và hiệu năng; có tài liệu để triển khai công khai sau đó.
 
 Tại thời điểm lập kế hoạch, repo chỉ có tài liệu, chưa có backend hoặc frontend. Kế hoạch bắt đầu từ khởi tạo dự án.
@@ -122,8 +129,8 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 - [x] Cài đặt speed profile: tra `highway`, lấy tốc độ thấp nhất khi là danh sách, dùng `default` khi không nhận diện được. Đã xác minh trong bộ 175 test backend đạt với extra `data` theo output người phát triển.
 - [x] Cài đặt parser `maxspeed`: km/h, mph, danh sách, dữ liệu chữ hoặc không hợp lệ; chỉ dùng làm cận trên. Đã xác minh trong bộ 175 test backend đạt với extra `data` theo output người phát triển.
 - [x] Kiểm tra chiều dài, tốc độ và thời gian cạnh hữu hạn, dương; báo cáo dữ liệu bị loại hoặc phải sửa. CLI dữ liệu thật đã thành công qua validation và kiểm tra nạp lại GraphML; metadata báo 0 cạnh lỗi, 0 cạnh bị loại. Khi gặp cạnh lỗi, CLI dừng thay vì tự loại/sửa. Kiểm thử regression đã đạt trong bộ 175 test backend theo output người phát triển.
-- [ ] Giữ SCC lớn nhất; xuất số node/cạnh bị loại và bản đồ vùng bị loại trong AOI.
-- [ ] Xác định cặp cạnh ngược chiều cùng đoạn đường bằng dữ liệu và hình học; không suy luận chỉ từ hai đầu mút.
+- [x] Giữ SCC lớn nhất; xuất số node/cạnh bị loại và GeoJSON vùng bị loại trong AOI. `graph_components` và CLI `scripts.prepare_graph_scc` đã qua Ruff và 193 test backend (không bỏ qua, 45 cảnh báo deprecation) ngày 2026-11-07. Artifact `backend/data/scc/drive-20261106T092834Z-car-v1-scc-v2/` giữ 20.162 node/35.466 cạnh từ 443 SCC; loại 967 node/1.446 cạnh, gồm 29 node và 37 feature cạnh trong AOI. Đã xác minh checksum, liên thông mạnh, hình học và mọi thuộc tính node/cạnh giữ lại; chưa rà soát trực quan GeoJSON hoặc AOI toàn nội đô.
+- [x] Xác định cặp cạnh ngược chiều cùng đoạn đường bằng dữ liệu và hình học; không suy luận chỉ từ hai đầu mút. Service `graph_reverse_edges` và CLI `scripts.prepare_reverse_edges` đối chiếu osmid, oneway, layer/level/bridge/tunnel và hình học đảo chiều trong 0,01 m; chỉ ghép khi duy nhất ở cả hai phía, giữ riêng trọng số từng chiều. Ruff và 223 test backend đạt (30 test mới, không bỏ qua, 45 cảnh báo deprecation). Artifact `backend/data/reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1/` có 13.803 cặp/27.606 cạnh ghép, 7.860 cạnh không ghép đều là one-way, không mơ hồ; đã xác minh độc lập toàn bộ cạnh, tiêu chí ghép và checksum, không sửa graph SCC nguồn.
 - [ ] Chia cạnh có thời gian trên 60 giây; giữ nguyên tổng chiều dài, tổng thời gian và chiều đi. Cạnh hai chiều cùng đoạn đường dùng các vị trí chia tương ứng.
 - [ ] Xử lý giao với biên AOI khi chia cạnh để xác định đúng node và đoạn đường thuộc phạm vi hỗ trợ.
 - [ ] Cấp ID tất định cho node/cạnh sinh thêm; kiểm tra SCC sau chia cạnh.
