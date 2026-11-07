@@ -2,7 +2,7 @@
 
 **Căn cứ:** [Software & Technical Specification v0.2.0](../spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)  
 **Ngày lập:** 2026-11-06  
-**Trạng thái:** M0 hoàn thành local; CI remote chưa được xác minh. M1 đã có AOI thử nghiệm, buffer 3 km và snapshot OSM thật `drive-20261106T092834Z`; Đã chuẩn hóa hình học EPSG:32648 trên snapshot thật; Đã gán trọng số car-v1 trên artifact thật; người phát triển xác nhận Ruff và 175 test backend đạt (18 cảnh báo deprecation). AOI toàn nội đô và các bước tiền xử lý đồ thị M1 còn lại chưa hoàn thành; M2–M6 chưa thực hiện.
+**Trạng thái:** M0 hoàn thành local; remote CI chưa xác minh. M1 đã có pipeline offline trên AOI thử nghiệm đến chia cạnh theo ngưỡng 60 giây và biên AOI; Ruff và 253 test backend đạt (54 cảnh báo deprecation). Chưa rà soát AOI toàn nội đô, gắn cờ ứng viên, xuất CSR hoặc tích hợp runtime; M1 chưa hoàn thành, M2–M6 chưa thực hiện.
 
 ## 1. Mục tiêu và các quyết định đã chốt
 
@@ -10,7 +10,9 @@
 193 test backend đạt; artifact SCC giữ 20.162 node/35.466 cạnh, có thống kê và
 GeoJSON phần bị loại trong AOI. Nhận diện cạnh ngược đã hoàn thành: 13.803 cặp,
 7.860 cạnh một chiều, không có ca mơ hồ trong snapshot hiện tại; toàn bộ 223 test
-backend và Ruff đạt. Chưa rà soát trực quan, chia cạnh hoặc xuất CSR;
+backend và Ruff đạt. Đã chia cạnh theo ngưỡng 60 giây và biên AOI: graph có
+20.221 node/35.556 cạnh, max 56,178 giây; Ruff và 253 test đạt. Chưa rà soát trực quan
+hoặc xuất CSR;
 M1 và các cổng nghiệm thu tiếp theo vẫn chưa hoàn thành.
 
 Hoàn thành ứng dụng chạy đầy đủ bằng Docker trên máy local: người dùng đặt 4 vị trí tại Hà Nội, tìm tối đa 5 điểm gặp và xem 4 tuyến đường tương ứng. Ứng dụng phải vượt các kiểm thử chức năng, tính đúng đắn và hiệu năng; có tài liệu để triển khai công khai sau đó.
@@ -131,9 +133,9 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 - [x] Kiểm tra chiều dài, tốc độ và thời gian cạnh hữu hạn, dương; báo cáo dữ liệu bị loại hoặc phải sửa. CLI dữ liệu thật đã thành công qua validation và kiểm tra nạp lại GraphML; metadata báo 0 cạnh lỗi, 0 cạnh bị loại. Khi gặp cạnh lỗi, CLI dừng thay vì tự loại/sửa. Kiểm thử regression đã đạt trong bộ 175 test backend theo output người phát triển.
 - [x] Giữ SCC lớn nhất; xuất số node/cạnh bị loại và GeoJSON vùng bị loại trong AOI. `graph_components` và CLI `scripts.prepare_graph_scc` đã qua Ruff và 193 test backend (không bỏ qua, 45 cảnh báo deprecation) ngày 2026-11-07. Artifact `backend/data/scc/drive-20261106T092834Z-car-v1-scc-v2/` giữ 20.162 node/35.466 cạnh từ 443 SCC; loại 967 node/1.446 cạnh, gồm 29 node và 37 feature cạnh trong AOI. Đã xác minh checksum, liên thông mạnh, hình học và mọi thuộc tính node/cạnh giữ lại; chưa rà soát trực quan GeoJSON hoặc AOI toàn nội đô.
 - [x] Xác định cặp cạnh ngược chiều cùng đoạn đường bằng dữ liệu và hình học; không suy luận chỉ từ hai đầu mút. Service `graph_reverse_edges` và CLI `scripts.prepare_reverse_edges` đối chiếu osmid, oneway, layer/level/bridge/tunnel và hình học đảo chiều trong 0,01 m; chỉ ghép khi duy nhất ở cả hai phía, giữ riêng trọng số từng chiều. Ruff và 223 test backend đạt (30 test mới, không bỏ qua, 45 cảnh báo deprecation). Artifact `backend/data/reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1/` có 13.803 cặp/27.606 cạnh ghép, 7.860 cạnh không ghép đều là one-way, không mơ hồ; đã xác minh độc lập toàn bộ cạnh, tiêu chí ghép và checksum, không sửa graph SCC nguồn.
-- [ ] Chia cạnh có thời gian trên 60 giây; giữ nguyên tổng chiều dài, tổng thời gian và chiều đi. Cạnh hai chiều cùng đoạn đường dùng các vị trí chia tương ứng.
-- [ ] Xử lý giao với biên AOI khi chia cạnh để xác định đúng node và đoạn đường thuộc phạm vi hỗ trợ.
-- [ ] Cấp ID tất định cho node/cạnh sinh thêm; kiểm tra SCC sau chia cạnh.
+- [x] Chia cạnh có thời gian trên 60 giây; giữ nguyên tổng chiều dài, tổng thời gian và chiều đi. Service `graph_split` và CLI `scripts.prepare_graph_split` dùng chung điểm cắt theo chiều chậm hơn cho cặp đã xác nhận. Artifact `backend/data/split/drive-20261106T092834Z-car-v1-split-v1/` có 20.221 node/35.556 cạnh, chia 82 cạnh gốc và thêm 59 node; max 56,178 giây. Ruff và 253 test đạt (30 test mới, không bỏ qua; 54 cảnh báo deprecation). Đối chiếu đủ 35.466 cạnh gốc: sai số tổng chiều dài tối đa 2,274e-13 m, tổng thời gian không đổi; seed 20261107, 20 nguồn × 20.162 node gốc có sai số khoảng cách tối đa 4,548e-13 giây.
+- [x] Xử lý giao với biên AOI khi chia cạnh để xác định đúng node và đoạn đường thuộc phạm vi hỗ trợ. Cắt cả cạnh ngắn tại biên ngoài, lỗ polygon và đầu đoạn trùng biên; xuất `aoi_relation` inside/boundary/outside, chưa gắn cờ ứng viên. Đã kiểm tra mọi giao biên của artifact đầu ra; 50 node boundary. Sai số phân loại biên 1e-7 m, gộp điểm cắt trong 1e-8 m để tránh nhiễu số học.
+- [x] Cấp ID tất định cho node/cạnh sinh thêm; kiểm tra SCC sau chia cạnh. Node mới dùng số nguyên âm giảm dần dưới mọi ID nguồn, theo thứ tự nhóm cạnh; child giữ key chiều gốc và dùng endpoint mới. Test đổi thứ tự chèn/ID nguồn âm đạt; graph xuất/nạp lại vẫn liên thông mạnh. `edge_splits.json` truy vết cạnh gốc → chuỗi cạnh con; mapping reverse được dựng lại cho graph mới.
 - [ ] Gắn cờ ứng viên trong AOI; hỗ trợ đọc danh sách loại trừ nếu có dữ liệu.
 - [ ] Khi xuất CSR, chọn cạnh nhỏ nhất theo `(travel_time, edge_key)` cho mỗi cặp có hướng; không để thư viện cộng trọng số cạnh song song.
 - [ ] Lưu ánh xạ node ID ↔ chỉ số mảng và cung CSR ↔ cạnh/hình học gốc.
@@ -146,7 +148,7 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 
 - [ ] Đồ thị nạp lại được từ artifact mà không tải OSM.
 - [ ] Không có cạnh sai đơn vị, trọng số không hợp lệ hoặc ánh xạ CSR thiếu hình học.
-- [ ] Các đoạn sau chia đáp ứng ngưỡng 60 giây.
+- [x] Các đoạn sau chia đáp ứng ngưỡng 60 giây. Đã xác minh trên artifact thử nghiệm: max 56,177981 giây; chưa thay thế nghiệm thu trên AOI toàn nội đô.
 - [ ] Có báo cáo rà soát phạm vi AOI và vùng bị loại bởi SCC.
 
 ### M2 — Prototype thuật toán tham chiếu

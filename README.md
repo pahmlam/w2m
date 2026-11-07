@@ -5,8 +5,9 @@ thời gian di chuyển và mức ưu tiên công bằng của cả nhóm.
 
 **Hiện trạng ngày 2026-11-07:** M0 hoàn thành local. M1 đã có pipeline offline từ
 AOI thử nghiệm đến snapshot OSM, chuẩn hóa hình học, gán trọng số `car-v1`, lọc SCC
-lớn nhất và nhận diện cặp cạnh ngược. Chưa chia cạnh dài, xuất CSR hoặc nạp graph
-vào API. Frontend hiện là trang khởi tạo, chưa gọi backend hoặc hiển thị bản đồ.
+lớn nhất, nhận diện cặp cạnh ngược và chia cạnh theo ngưỡng 60 giây/biên AOI.
+Chưa gắn cờ ứng viên, xuất CSR hoặc nạp graph vào API. Frontend hiện là trang khởi tạo,
+chưa gọi backend hoặc hiển thị bản đồ.
 Thuật toán tìm điểm gặp, cache/rerank, Docker và nghiệm thu MVP chưa hoàn thành.
 
 - [SPEC v0.2.0](docs/spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)
@@ -93,8 +94,8 @@ lint/typecheck/build; hiện chưa cài extra `data`, nên không kiểm tra to�
 
 Bằng chứng local gần nhất:
 
-- Backend: Ruff và **223 test đạt**, không bỏ qua, sau bước nhận diện cạnh ngược
-  ngày 2026-11-07. Còn 45 cảnh báo deprecation Shapely/TestClient.
+- Backend: Ruff và **253 test đạt**, không bỏ qua, sau bước chia cạnh
+  ngày 2026-11-07. Còn 54 cảnh báo deprecation Shapely/TestClient.
 - Frontend: người phát triển đã xác nhận install/audit (0 vulnerabilities),
   lint/typecheck/build và trang chủ hoạt động ở M0; chưa chạy lại trong các task M1.
 - Remote CI, frontend E2E và benchmark MVP chưa được xác minh.
@@ -109,6 +110,7 @@ Polygon AOI nguồn
   → prepare_graph_weights  → tốc độ và thời gian cạnh car-v1
   → prepare_graph_scc       → SCC lớn nhất, GeoJSON phần bị loại
   → prepare_reverse_edges   → ánh xạ cặp cạnh ngược và báo cáo
+  → prepare_graph_split     → cạnh ≤ 60 giây, cắt biên AOI, lineage và mapping mới
 ```
 
 Mỗi CLI chạy riêng; các bước truyền dữ liệu qua file, không tự gọi bước kế tiếp.
@@ -123,6 +125,7 @@ Chỉ `download_osm` tải OSM qua mạng. API và startup không gọi các CLI
 | Trọng số | `weighted/drive-20261106T092834Z-car-v1/` | 40 cạnh dùng default, 44 cạnh bị maxspeed giới hạn |
 | SCC | `scc/drive-20261106T092834Z-car-v1-scc-v2/` | Giữ 20.162 node, 35.466 cạnh; loại 967 node, 1.446 cạnh |
 | Cạnh ngược | `reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1/` | 13.803 cặp; 7.860 cạnh one-way không ghép; không mơ hồ |
+| Chia cạnh | `split/drive-20261106T092834Z-car-v1-split-v1/` | 20.221 node, 35.556 cạnh; max 56,178 giây |
 
 Artifact lớn được Git ignore; chúng không có sẵn chỉ nhờ clone repo. Nếu đã có
 snapshot local ở trên thì tái sử dụng, không cần tải OSM lại. Snapshot có cutoff
@@ -170,6 +173,11 @@ PYTHONPATH=backend uv run --project backend --locked --extra data python -m scri
 PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_reverse_edges \
   --scc-dir backend/data/scc/drive-20261106T092834Z-car-v1-scc-v2 \
   --output-dir backend/data/reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1
+
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_graph_split \
+  --scc-dir backend/data/scc/drive-20261106T092834Z-car-v1-scc-v2 \
+  --reverse-dir backend/data/reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1 \
+  --output-dir backend/data/split/drive-20261106T092834Z-car-v1-split-v1
 ```
 
 Các CLI graph/snapshot từ chối ghi đè thư mục đích: chọn đích mới khi tái tạo và
@@ -180,6 +188,11 @@ SCC xuất `removed_in_aoi.geojson` gồm 29 node và 37 đoạn cạnh bị lo�
 chưa rà soát bản đồ trực quan. Mapping cạnh ngược dùng osmid, oneway, thông tin
 layer/level/bridge/tunnel và hình học đảo chiều trong 0,01 m; không đổi trọng số
 mỗi chiều hoặc tự thêm chiều đi.
+
+Bước chia cạnh dùng chung vị trí chia cho hai chiều đã ghép, giữ tổng chiều dài
+và thời gian từng cạnh gốc; xuất lineage, mapping mới và phân loại inside/boundary/outside.
+Node mới có ID tất định, không nối các đường chỉ giao hình học. Graph nạp lại vẫn
+liên thông mạnh; chưa gắn cờ ứng viên. Xem giới hạn ghép xấp xỉ trong hướng dẫn dữ liệu.
 
 ## Cấu trúc mã nguồn
 
@@ -194,6 +207,7 @@ mỗi chiều hoặc tự thêm chiều đi.
 | `backend/app/services/graph_weights.py` | Parse maxspeed và gán thời gian cạnh |
 | `backend/app/services/graph_components.py` | Lọc SCC, xuất phần bị loại trong AOI |
 | `backend/app/services/graph_reverse_edges.py` | Nhận diện cặp cạnh ngược |
+| `backend/app/services/graph_split.py` | Chia cạnh, xử lý biên AOI và truy vết cạnh gốc |
 | `backend/scripts/` | CLI đọc/ghi artifact và gọi các service |
 | `backend/tests/` | Test nền tảng, dữ liệu và CLI offline |
 | `frontend/app/` | Layout, trang chủ và CSS |
@@ -210,9 +224,9 @@ Frontend đọc `frontend/.env.local`; xem [mẫu cấu hình](frontend/.env.exa
 sau. Mọi biến `NEXT_PUBLIC_*` đều công khai; không đặt secret vào đó. MapLibre đã
 có dependency nhưng chưa được dùng để hiển thị bản đồ, chưa chọn tile provider.
 
-- Bước kế tiếp: chia cạnh trên 60 giây, đồng bộ vị trí chia hai chiều và xử lý biên
-  AOI; sau đó gắn cờ ứng viên, xuất CSR và hoàn thiện validation M1.
-- Graph SCC vẫn có cạnh tối đa 140,494 giây; chưa đạt ngưỡng sau chia 60 giây.
+- Bước kế tiếp: gắn cờ ứng viên trong AOI, hỗ trợ danh sách loại trừ, xuất CSR và
+  hoàn thiện validation M1. AOI toàn nội đô vẫn cần rà soát.
+- Graph sau chia đạt ngưỡng 60 giây; artifact SCC trước chia vẫn được giữ để truy vết.
 - `car-v1` là tốc độ giả định, chưa hiệu chỉnh. Mô hình chưa xét cấm rẽ, chi phí rẽ
   hoặc giao thông thời gian thực; kết quả sau này là thời gian ước lượng.
 - Chưa có snapping/Dijkstra/OWA phục vụ request, cache/rerank hoặc Docker runtime.

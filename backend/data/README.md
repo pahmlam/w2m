@@ -300,3 +300,65 @@ one-way, không ca mơ hồ. Đã đối chiếu độc lập mọi cặp về o
 tags, geometry và phủ đủ 35.466 cạnh, đồng thời xác minh checksum nguồn/đầu ra.
 Ruff đạt, toàn bộ 223 test backend đạt (30 test mới), không bỏ qua; 45 cảnh báo
 deprecation Shapely/TestClient vẫn còn. Chưa thực hiện chia cạnh dài hoặc snapping.
+
+## Chia cạnh theo thời gian và biên AOI — M1
+
+Chạy offline từ thư mục gốc, dùng graph SCC và mapping đúng phiên bản:
+
+```sh
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_graph_split \
+  --scc-dir backend/data/scc/drive-20261106T092834Z-car-v1-scc-v2 \
+  --reverse-dir backend/data/reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1 \
+  --output-dir backend/data/split/drive-20261106T092834Z-car-v1-split-v1
+```
+
+Mặc định lấy `W2M_MAX_EDGE_SECONDS` (60 giây), có thể ghi đè bằng
+`--max-edge-seconds`. Đích phải là thư mục mới. CLI kiểm tra checksum graph,
+profile, AOI và mapping, ràng buộc mapping với metadata SCC; xác thực lại tiêu
+chí ghép trên graph nguồn. Không tải mạng hoặc sửa artifact đầu vào.
+
+Quy tắc chia:
+
+- Cặp hai chiều dùng các điểm cắt chung trên cùng đường, số đoạn dựa trên chiều
+  chậm hơn; giữ riêng tốc độ và tổng thời gian từng chiều. Thêm biên an toàn số học
+  1e-12 theo tỷ lệ khi tính số đoạn, nên bội số chính xác của ngưỡng có thể được
+  chia thêm một đoạn. Cạnh không vượt ngưỡng vẫn được cắt nếu giao biên AOI.
+- Điểm cắt gồm giao biên ngoài/lỗ, điểm tiếp xúc và đầu/cuối đoạn trùng biên.
+  Duyệt từng đoạn hình học để không bỏ lần đi qua biên lặp lại của self-loop.
+  Gộp giao biên cách điểm cắt đã có không quá 1e-8 m; ưu tiên điểm chia đều.
+- Node mới chỉ được dùng chung trong cặp cạnh đã xác nhận. Không nối đường chỉ
+  vì giao hình học, không thêm chiều đi. Giữ đoạn ngoài AOI để định tuyến vòng.
+- Node mới mang ID âm giảm dần, nhỏ hơn mọi ID nguồn, theo thứ tự nhóm cạnh gốc
+  đã sắp. Child giữ edge key chiều gốc; endpoint mới tạo ID `(u, v, key)` tất định.
+- Geometry con giữ đường cong; chiều dài đo từ geometry. Thời gian chia theo tỷ
+  lệ chiều dài, đoạn cuối nhận phần dư số học để bảo toàn tổng thời gian gốc.
+- `aoi_relation` ở node/cạnh là inside/boundary/outside; cạnh phân loại tại trung
+  điểm sau cắt. Sai số nhận diện biên 1e-7 m. Đây chưa phải cờ ứng viên hoặc bảng loại trừ.
+
+CLI dừng nếu mapping mơ hồ/thiếu thông tin hướng hoặc osmid. Cặp chỉ khớp xấp xỉ
+trong 1 cm nhưng chưa đảo geometry chính xác sẽ không được chia chung: dừng để
+rà soát, không tự dịch chuyển geometry làm đổi chiều dài. Snapshot hiện tại không
+gặp giới hạn này. Các cạnh không có reverse tương thích và self-loop được chia riêng.
+
+Artifact `stage: split` gồm:
+
+- `graph.graphml`: graph EPSG:32648, node mới có cả lon/lat WGS84; cạnh đã chia có
+  `parent_u`, `parent_v`, `parent_key`, `segment_index` (0-based theo chiều đi).
+- `edge_splits.json`: mỗi phần tử có `parent: [u,v,key]` và `children` theo thứ tự
+  chiều đi, gồm cả cạnh không chia. Phủ mỗi cạnh gốc và mỗi child đúng một lần.
+- `reverse_edges.json`: mapping được tính lại cho graph mới, cùng cấu trúc pairs/unpaired.
+  Mapping nguồn cũ không được dùng cho graph sau chia.
+- `aoi.geojson`, `speed_profile.yaml`: bản sao nguồn.
+- `metadata.json`: checksum, provenance, thống kê chia cạnh, quy tắc ID, phân loại
+  AOI và P50/P99/max thời gian cạnh sau chia. Chưa phải metadata production đầy đủ.
+
+Chỉ công bố thư mục sau khi GraphML nạp lại đúng tọa độ, geometry, trọng số,
+provenance cạnh con và vẫn liên thông mạnh; mọi cạnh phải có thời gian ≤ ngưỡng.
+
+Kết quả local ngày 2026-11-07: 20.221 node, 35.556 cạnh; thêm 59 node, chia 82 cạnh
+gốc, 50 node boundary. P50/P99/max thời gian là 2,933/23,099/56,178 giây. Đối chiếu
+độc lập đủ 35.466 cạnh gốc: sai số chiều dài tối đa 2,274e-13 m, tổng thời gian
+không đổi; geometry, điểm cắt biên và vị trí chia hai chiều đạt. Kiểm tra NetworkX
+với seed 20261107, 20 nguồn tới toàn bộ 20.162 node gốc (403.240 so sánh): sai số
+tối đa 4,548e-13 giây. Ruff và 253 test backend đạt, không bỏ qua; 54 cảnh báo
+deprecation Shapely/TestClient. Chưa gắn cờ ứng viên, xuất CSR hoặc tích hợp runtime.
