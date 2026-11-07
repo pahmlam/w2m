@@ -144,3 +144,70 @@ Có 18 cảnh báo deprecation Shapely/TestClient trong lần chạy này.
 
 Artifact này chưa lọc SCC, gán tốc độ/thời gian, chia cạnh hoặc xuất CSR.
 Chưa tích hợp runtime và không làm readiness chuyển sang 200.
+
+## Gán tốc độ và thời gian cạnh offline — M1
+
+Đã bổ sung mã nguồn; người phát triển đã chạy CLI thành công trên dữ liệu thật.
+Output người phát triển cung cấp xác nhận Ruff đạt và 175 test backend đạt
+trong 1,78 giây, không bỏ qua test; còn 18 cảnh báo deprecation Shapely/TestClient.
+Các lệnh tái tạo từ thư mục gốc ở dưới; chỉ chạy CLI sau khi các kiểm tra đạt:
+
+```sh
+uv run --project backend --locked --extra data ruff check backend
+uv run --project backend --locked --extra data pytest backend/tests
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_graph_weights \
+  --geometry-dir backend/data/geometry/drive-20261106T092834Z-utm-v1 \
+  --profile backend/app/config/speed_profiles/car-v1.yaml \
+  --output-dir backend/data/weighted/drive-20261106T092834Z-car-v1
+```
+
+Giữ `--extra data` khi chạy test để thực hiện cả roundtrip OSMnx; nếu không có
+OSMnx, các test roundtrip sẽ bị bỏ qua. Không tải OSM trong các test hoặc CLI này.
+uv có thể cần tải dependency nếu môi trường chưa đủ package đã khóa.
+
+CLI đọc artifact `geometry-only`, kiểm tra checksum và xuất thư mục mới gồm:
+
+- `graph.graphml`: giữ nguyên node, hướng, cạnh song song và geometry.
+  Mỗi cạnh thêm `estimated_speed_kmh`, `travel_time_seconds` và alias
+  `travel_time` để dùng cùng quy ước trọng số NetworkX/OSMnx.
+- `speed_profile.yaml`: bản sao chính xác profile đã dùng; mặc định lấy
+  `W2M_SPEED_PROFILE_PATH`, có thể ghi đè bằng `--profile`.
+- `metadata.json`: phiên bản/hash profile, checksum input/output, nguồn, CRS,
+  số node/cạnh, thống kê tốc độ và P50/P99/max thời gian cạnh (giây).
+
+Quy tắc tốc độ theo mục 3.2.1 spec:
+
+- `highway` là danh sách: tra từng loại rồi lấy tốc độ thấp nhất.
+  Loại thiếu/không nhận diện dùng `default`.
+- `maxspeed` nhận số km/h, chuỗi số, hậu tố `km/h`, `kmh`, `kph`, `mph`,
+  danh sách hoặc chuỗi phân tách bằng dấu `;`. mph nhân đúng 1,609.
+  Chỉ lấy nhỏ nhất trong các giá trị hữu hạn, dương; bỏ giá trị chữ và boolean.
+- Tốc độ thực dùng là min(profile, maxspeed hợp lệ), đổi sang m/s bằng chia 3,6.
+  Thời gian là `length_m / speed_mps`, không lượng tử trong artifact.
+- Profile phải là ô tô, đơn vị kmh, có `default`, tốc độ hữu hạn dương và
+  `maxspeed_cap: true`. Không chấp nhận profile tắt cận maxspeed.
+
+`default_speed_edge_count` đếm mỗi cạnh một lần nếu có ít nhất một mục highway
+phải dùng default, kể cả khi mục khác cung cấp tốc độ chậm hơn.
+`maxspeed_capped_edge_count` đếm cạnh có tốc độ thực bị giảm bởi maxspeed.
+`ignored_maxspeed_edge_count` đếm cạnh có tag maxspeed nhưng không có giá trị hợp lệ.
+
+Chiều dài, tốc độ và thời gian phải hữu hạn, dương. Cạnh lỗi làm dừng CLI với ID
+cạnh, không công bố artifact; không tự xóa hoặc sửa cạnh. Khi thành công,
+`invalid_edge_count` và `removed_edge_count` bằng 0. GraphML được kiểm tra nạp lại
+trước khi công bố. Không ghi đè thư mục đích hoặc sửa artifact đầu vào.
+
+Sau khi CLI thành công, xem báo cáo:
+
+```sh
+cat backend/data/weighted/drive-20261106T092834Z-car-v1/metadata.json
+```
+
+Đây vẫn là đồ thị trung gian: chưa lọc SCC, chia cạnh dài hoặc xuất CSR.
+Bảng car-v1 là giả định ban đầu, chưa hiệu chỉnh bằng thời gian thực tế.
+
+Kết quả local đã xác minh từ metadata artifact weighted: 21.129 node, 36.912 cạnh,
+40 cạnh dùng default, 44 cạnh bị maxspeed giới hạn, 0 tag maxspeed bị bỏ qua,
+0 cạnh lỗi/bị loại. P50/P99/max thời gian cạnh: 2,927/22,924/140,494 giây.
+Checksum graph đầu ra, profile lưu kèm, graph và metadata nguồn đã được đối chiếu.
+Max vượt 60 giây là đầu vào cho bước chia cạnh tiếp theo, chưa đạt tiêu chí sau chia.
