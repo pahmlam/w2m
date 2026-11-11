@@ -36,3 +36,4 @@ W2M is a web app for finding fair, efficient meeting points for four people in H
 - Do not create a journal for tasks with no actual repository changes or solely for journal maintenance, as specified by the journal rules.
 - In the final task response, state the changes, actual verification results, remaining limitations (if any), and the new journal's path. A coding task is not finished until its required journal is written.
 - Always tick the checklist in plan file whenever done task.
+- Only tick checklist in `W2M-MVP-Plan.md` do not rewrite result in here. The result should stays in journal 

@@ -361,4 +361,64 @@ gốc, 50 node boundary. P50/P99/max thời gian là 2,933/23,099/56,178 giây. 
 không đổi; geometry, điểm cắt biên và vị trí chia hai chiều đạt. Kiểm tra NetworkX
 với seed 20261107, 20 nguồn tới toàn bộ 20.162 node gốc (403.240 so sánh): sai số
 tối đa 4,548e-13 giây. Ruff và 253 test backend đạt, không bỏ qua; 54 cảnh báo
-deprecation Shapely/TestClient. Chưa gắn cờ ứng viên, xuất CSR hoặc tích hợp runtime.
+deprecation Shapely/TestClient. Artifact ở bước chia cạnh là đầu vào cho bước gắn cờ ứng viên.
+
+## Gắn cờ node ứng viên
+
+Chạy `scripts.prepare_graph_candidates` với `--split-dir` và một `--output-dir` mới.
+Tùy chọn `--exclude-node-ids` nhận một tệp JSON chứa mảng ID số nguyên, ví dụ
+`[12345, -3]`. ID phải tồn tại trên graph đã chia và mỗi ID chỉ xuất hiện một lần.
+Khi không truyền tệp, danh sách mặc định là `[]`.
+
+Mỗi node có hai cờ trong GraphML:
+
+- `in_aoi` đánh dấu node `inside` hoặc `boundary` theo `aoi_relation` của bước chia cạnh.
+- `is_candidate` đánh dấu node `in_aoi` có ID không nằm trong danh sách loại trừ.
+
+OSMnx lưu các cờ dưới dạng chuỗi `True` và `False` trong GraphML. Khi nạp bằng
+OSMnx, dùng `node_dtypes` để chuyển hai chuỗi này về boolean.
+
+Artifact `stage: candidates` giữ nguyên AOI, profile, lineage và mapping cạnh
+ngược. Metadata ghi checksum của đầu vào, graph đầu ra và `excluded_node_ids.json`,
+cùng `candidate_node_count`, `excluded_node_count` và `excluded_in_aoi_count`.
+Danh sách loại trừ chỉ ảnh hưởng đến việc chọn điểm gặp. Node và cạnh vẫn có
+mặt trong graph để định tuyến.
+
+## Xuất CSR và các ánh xạ
+
+`scripts.prepare_graph_csr` nhận `--candidates-dir`, `--output-dir` mới và
+`--graph-version`. Lệnh chạy đầy đủ nằm trong README gốc. Bundle `stage: csr`
+giữ AOI, speed profile, danh sách loại trừ, lineage và mapping cạnh ngược cùng
+graph tham chiếu. Metadata và thuộc tính graph `graph_version` xác định phiên bản
+của bundle, với checksum từng file để đối chiếu.
+
+| File | Dữ liệu |
+|---|---|
+| `graph.graphml` | Toàn bộ graph tham chiếu, cạnh song song và geometry gốc |
+| `csr.npz` | Ma trận CSR có hướng, trọng số float64 theo giây |
+| `mappings.npz` | Node ID, tọa độ, cờ ứng viên, ID cạnh và ánh xạ cung CSR |
+| `geometry.npz` | Toàn bộ geometry cạnh dưới dạng tọa độ EPSG:32648 và offsets |
+
+Trong `mappings.npz`, `node_ids[i]` là ID của node tại chỉ số CSR `i`, sắp tăng
+dần và gồm cả ID âm của node chia cạnh. Chiều ngược tạo bằng
+`{int(node_id): i for i, node_id in enumerate(node_ids)}`.
+`node_xy[i]` có thứ tự `[x, y]`, `node_lonlat[i]` có thứ tự `[lon, lat]`.
+`in_aoi` và `is_candidate` là mảng boolean.
+
+Mỗi offset `p` trong `csr.data` có `edge_index = arc_edge_indices[p]`.
+`edge_ids[edge_index]` là bộ `(u, v, key)` để tra thuộc tính trong graph tham chiếu.
+Geometry tương ứng lấy từ
+`coordinates[offsets[edge_index]:offsets[edge_index + 1]]` trong `geometry.npz`.
+`edge_ids` chứa toàn bộ cạnh có hướng, sắp theo `(u, v, key)`, kể cả cạnh song song
+không được chọn vào CSR. Có thể dựng LineString và STRtree từ các lát tọa độ này
+khi khởi động backend. Nạp các file mảng bằng `np.load(..., allow_pickle=False)`.
+
+CSR chọn cạnh có `(travel_time, edge_key)` nhỏ nhất cho từng cặp có hướng.
+Các phần tử CSR được tạo trực tiếp từ data, indices và indptr để giữ đúng trọng số.
+CLI kiểm tra lưu/nạp lại, rồi đối chiếu SciPy Dijkstra có hướng với NetworkX
+trên tối đa 20 nguồn tất định, seed 20261111, trước khi công bố thư mục đầu ra.
+
+Artifact thử nghiệm `csr/hanoi-pilot-car-v1-csr-v1/` có 20.221 node, 35.556 cung,
+2.504 ứng viên. Trong artifact này mọi cặp node có hướng đều có một cạnh.
+20 nguồn × 20.221 node cho sai số khoảng cách lớn nhất 0 giây. Kiểm thử graph
+tổng hợp kiểm tra cạnh song song, hòa thời gian, hướng đi, predecessor và hình học.

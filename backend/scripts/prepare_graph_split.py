@@ -21,6 +21,14 @@ from app.services.graph_split import BOUNDARY_TOLERANCE_METERS, split_graph_edge
 from scripts.download_osm import _sha256
 from scripts.prepare_graph_scc import NUMERIC_EDGE_FIELDS
 
+SPLIT_GRAPHML_DTYPES = {
+    "node_dtypes": {"lon": float, "lat": float},
+    "edge_dtypes": {
+        **dict.fromkeys(NUMERIC_EDGE_FIELDS, float),
+        **dict.fromkeys(("parent_u", "parent_v", "parent_key", "segment_index"), int),
+    },
+}
+
 
 def prepare_graph_split(
     scc_dir: Path, reverse_dir: Path, output_dir: Path, max_edge_seconds: float = 60.0,
@@ -51,14 +59,7 @@ def prepare_graph_split(
     aoi = load_aoi(scc_dir / "aoi.geojson")
     projector = Transformer.from_crs(WGS84_CRS, METRIC_CRS, always_xy=True)
     ox = import_module("osmnx")
-    load_options = {
-        "node_dtypes": {"lon": float, "lat": float},
-        "edge_dtypes": {
-            **dict.fromkeys(NUMERIC_EDGE_FIELDS, float),
-            **dict.fromkeys(("parent_u", "parent_v", "parent_key", "segment_index"), int),
-        },
-    }
-    graph = ox.load_graphml(filepath=scc_dir / "graph.graphml", **load_options)
+    graph = ox.load_graphml(filepath=scc_dir / "graph.graphml", **SPLIT_GRAPHML_DTYPES)
     if (
         graph.number_of_nodes() != source["node_count"]
         or graph.number_of_edges() != source["edge_count"]
@@ -75,7 +76,7 @@ def prepare_graph_split(
             shutil.copyfile(scc_dir / filename, staging / filename)
         graph_path = staging / "graph.graphml"
         ox.save_graphml(result, filepath=graph_path)
-        restored = ox.load_graphml(filepath=graph_path, **load_options)
+        restored = ox.load_graphml(filepath=graph_path, **SPLIT_GRAPHML_DTYPES)
         if (
             not nx.is_strongly_connected(restored)
             or set(restored.nodes) != set(result.nodes)

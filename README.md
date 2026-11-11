@@ -3,10 +3,10 @@
 Ứng dụng tìm điểm gặp cho 4 người trên mạng đường có hướng tại Hà Nội, dựa trên
 thời gian di chuyển và mức ưu tiên công bằng của cả nhóm.
 
-**Hiện trạng ngày 2026-11-07:** M0 hoàn thành local. M1 đã có pipeline offline từ
+**Hiện trạng ngày 2026-11-11:** M0 hoàn thành local. M1 đã có pipeline offline từ
 AOI thử nghiệm đến snapshot OSM, chuẩn hóa hình học, gán trọng số `car-v1`, lọc SCC
-lớn nhất, nhận diện cặp cạnh ngược và chia cạnh theo ngưỡng 60 giây/biên AOI.
-Chưa gắn cờ ứng viên, xuất CSR hoặc nạp graph vào API. Frontend hiện là trang khởi tạo,
+lớn nhất, nhận diện cặp cạnh ngược, chia cạnh theo ngưỡng 60 giây/biên AOI,
+gắn cờ ứng viên và xuất CSR cùng ánh xạ. API còn chờ tích hợp graph. Frontend là trang khởi tạo,
 chưa gọi backend hoặc hiển thị bản đồ.
 Thuật toán tìm điểm gặp, cache/rerank, Docker và nghiệm thu MVP chưa hoàn thành.
 
@@ -94,8 +94,8 @@ lint/typecheck/build; hiện chưa cài extra `data`, nên không kiểm tra to�
 
 Bằng chứng local gần nhất:
 
-- Backend: Ruff và **253 test đạt**, không bỏ qua, sau bước chia cạnh
-  ngày 2026-11-07. Còn 54 cảnh báo deprecation Shapely/TestClient.
+- Backend: Ruff và **276 test đạt**, không bỏ qua, sau bước xuất CSR
+  ngày 2026-11-11. Còn 58 cảnh báo deprecation Shapely/TestClient.
 - Frontend: người phát triển đã xác nhận install/audit (0 vulnerabilities),
   lint/typecheck/build và trang chủ hoạt động ở M0; chưa chạy lại trong các task M1.
 - Remote CI, frontend E2E và benchmark MVP chưa được xác minh.
@@ -111,6 +111,8 @@ Polygon AOI nguồn
   → prepare_graph_scc       → SCC lớn nhất, GeoJSON phần bị loại
   → prepare_reverse_edges   → ánh xạ cặp cạnh ngược và báo cáo
   → prepare_graph_split     → cạnh ≤ 60 giây, cắt biên AOI, lineage và mapping mới
+  → prepare_graph_candidates → cờ phạm vi AOI và điều kiện làm điểm gặp
+  → prepare_graph_csr        → CSR, ánh xạ node/cung và geometry có phiên bản
 ```
 
 Mỗi CLI chạy riêng; các bước truyền dữ liệu qua file, không tự gọi bước kế tiếp.
@@ -126,6 +128,8 @@ Chỉ `download_osm` tải OSM qua mạng. API và startup không gọi các CLI
 | SCC | `scc/drive-20261106T092834Z-car-v1-scc-v2/` | Giữ 20.162 node, 35.466 cạnh; loại 967 node, 1.446 cạnh |
 | Cạnh ngược | `reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1/` | 13.803 cặp; 7.860 cạnh one-way không ghép; không mơ hồ |
 | Chia cạnh | `split/drive-20261106T092834Z-car-v1-split-v1/` | 20.221 node, 35.556 cạnh; max 56,178 giây |
+| Gắn cờ ứng viên | `candidates/drive-20261106T092834Z-car-v1-candidates-v1/` | 2.504 ứng viên, gồm 50 node trên biên AOI |
+| CSR | `csr/hanoi-pilot-car-v1-csr-v1/` | 20.221 node, 35.556 cung; đối chiếu NetworkX từ 20 nguồn đạt |
 
 Artifact lớn được Git ignore; chúng không có sẵn chỉ nhờ clone repo. Nếu đã có
 snapshot local ở trên thì tái sử dụng, không cần tải OSM lại. Snapshot có cutoff
@@ -178,6 +182,15 @@ PYTHONPATH=backend uv run --project backend --locked --extra data python -m scri
   --scc-dir backend/data/scc/drive-20261106T092834Z-car-v1-scc-v2 \
   --reverse-dir backend/data/reverse-edges/drive-20261106T092834Z-car-v1-reverse-v1 \
   --output-dir backend/data/split/drive-20261106T092834Z-car-v1-split-v1
+
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_graph_candidates \
+  --split-dir backend/data/split/drive-20261106T092834Z-car-v1-split-v1 \
+  --output-dir backend/data/candidates/drive-20261106T092834Z-car-v1-candidates-v1
+
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_graph_csr \
+  --candidates-dir backend/data/candidates/drive-20261106T092834Z-car-v1-candidates-v1 \
+  --output-dir backend/data/csr/hanoi-pilot-car-v1-csr-v1 \
+  --graph-version hanoi-pilot-car-v1-csr-v1
 ```
 
 Các CLI graph/snapshot từ chối ghi đè thư mục đích: chọn đích mới khi tái tạo và
@@ -192,7 +205,9 @@ mỗi chiều hoặc tự thêm chiều đi.
 Bước chia cạnh dùng chung vị trí chia cho hai chiều đã ghép, giữ tổng chiều dài
 và thời gian từng cạnh gốc; xuất lineage, mapping mới và phân loại inside/boundary/outside.
 Node mới có ID tất định, không nối các đường chỉ giao hình học. Graph nạp lại vẫn
-liên thông mạnh; chưa gắn cờ ứng viên. Xem giới hạn ghép xấp xỉ trong hướng dẫn dữ liệu.
+liên thông mạnh. Bước gắn cờ nhận mọi node trong hoặc trên biên AOI, kể cả node
+do chia cạnh sinh ra. Tùy chọn `--exclude-node-ids` nhận một tệp JSON chứa mảng
+ID node số nguyên. Node bị loại khỏi tập ứng viên vẫn dùng được để định tuyến.
 
 ## Cấu trúc mã nguồn
 
@@ -224,8 +239,8 @@ Frontend đọc `frontend/.env.local`; xem [mẫu cấu hình](frontend/.env.exa
 sau. Mọi biến `NEXT_PUBLIC_*` đều công khai; không đặt secret vào đó. MapLibre đã
 có dependency nhưng chưa được dùng để hiển thị bản đồ, chưa chọn tile provider.
 
-- Bước kế tiếp: gắn cờ ứng viên trong AOI, hỗ trợ danh sách loại trừ, xuất CSR và
-  hoàn thiện validation M1. AOI toàn nội đô vẫn cần rà soát.
+- Bước kế tiếp là hoàn thiện báo cáo validation và metadata M1, rà soát AOI toàn
+  nội đô và vùng bị SCC loại, kiểm thử buffer TC-15.
 - Graph sau chia đạt ngưỡng 60 giây; artifact SCC trước chia vẫn được giữ để truy vết.
 - `car-v1` là tốc độ giả định, chưa hiệu chỉnh. Mô hình chưa xét cấm rẽ, chi phí rẽ
   hoặc giao thông thời gian thực; kết quả sau này là thời gian ước lượng.

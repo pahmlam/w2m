@@ -2,7 +2,7 @@
 
 **Căn cứ:** [Software & Technical Specification v0.2.0](../spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)  
 **Ngày lập:** 2026-11-06  
-**Trạng thái:** M0 hoàn thành local; remote CI chưa xác minh. M1 đã có pipeline offline trên AOI thử nghiệm đến chia cạnh theo ngưỡng 60 giây và biên AOI; Ruff và 253 test backend đạt (54 cảnh báo deprecation). Chưa rà soát AOI toàn nội đô, gắn cờ ứng viên, xuất CSR hoặc tích hợp runtime; M1 chưa hoàn thành, M2–M6 chưa thực hiện.
+**Trạng thái:** M0 hoàn thành local; remote CI chưa xác minh. Pipeline offline M1 trên AOI thử nghiệm đã xuất CSR và các ánh xạ có phiên bản, có 2.504 ứng viên. Ruff và 276 test backend đạt (58 cảnh báo deprecation). Còn báo cáo validation/metadata đầy đủ, rà soát AOI toàn nội đô và tích hợp runtime. M1 chưa hoàn thành, M2–M6 chưa thực hiện.
 
 ## 1. Mục tiêu và các quyết định đã chốt
 
@@ -136,11 +136,11 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 - [x] Chia cạnh có thời gian trên 60 giây; giữ nguyên tổng chiều dài, tổng thời gian và chiều đi. Service `graph_split` và CLI `scripts.prepare_graph_split` dùng chung điểm cắt theo chiều chậm hơn cho cặp đã xác nhận. Artifact `backend/data/split/drive-20261106T092834Z-car-v1-split-v1/` có 20.221 node/35.556 cạnh, chia 82 cạnh gốc và thêm 59 node; max 56,178 giây. Ruff và 253 test đạt (30 test mới, không bỏ qua; 54 cảnh báo deprecation). Đối chiếu đủ 35.466 cạnh gốc: sai số tổng chiều dài tối đa 2,274e-13 m, tổng thời gian không đổi; seed 20261107, 20 nguồn × 20.162 node gốc có sai số khoảng cách tối đa 4,548e-13 giây.
 - [x] Xử lý giao với biên AOI khi chia cạnh để xác định đúng node và đoạn đường thuộc phạm vi hỗ trợ. Cắt cả cạnh ngắn tại biên ngoài, lỗ polygon và đầu đoạn trùng biên; xuất `aoi_relation` inside/boundary/outside, chưa gắn cờ ứng viên. Đã kiểm tra mọi giao biên của artifact đầu ra; 50 node boundary. Sai số phân loại biên 1e-7 m, gộp điểm cắt trong 1e-8 m để tránh nhiễu số học.
 - [x] Cấp ID tất định cho node/cạnh sinh thêm; kiểm tra SCC sau chia cạnh. Node mới dùng số nguyên âm giảm dần dưới mọi ID nguồn, theo thứ tự nhóm cạnh; child giữ key chiều gốc và dùng endpoint mới. Test đổi thứ tự chèn/ID nguồn âm đạt; graph xuất/nạp lại vẫn liên thông mạnh. `edge_splits.json` truy vết cạnh gốc → chuỗi cạnh con; mapping reverse được dựng lại cho graph mới.
-- [ ] Gắn cờ ứng viên trong AOI; hỗ trợ đọc danh sách loại trừ nếu có dữ liệu.
-- [ ] Khi xuất CSR, chọn cạnh nhỏ nhất theo `(travel_time, edge_key)` cho mỗi cặp có hướng; không để thư viện cộng trọng số cạnh song song.
-- [ ] Lưu ánh xạ node ID ↔ chỉ số mảng và cung CSR ↔ cạnh/hình học gốc.
-- [ ] Xuất đồ thị tham chiếu, CSR `.npz`, geometry, AOI và metadata có cùng phiên bản.
-- [ ] Chuẩn bị geometry để dựng STRtree khi backend khởi động.
+- [x] Gắn cờ ứng viên trong AOI; hỗ trợ đọc danh sách loại trừ nếu có dữ liệu. `scripts.prepare_graph_candidates` ghi `in_aoi` và `is_candidate` trên graph đã chia, đọc mảng JSON ID số nguyên và giữ các node bị loại để định tuyến. Artifact `backend/data/candidates/drive-20261106T092834Z-car-v1-candidates-v1/` có 2.504 ứng viên (2.454 trong AOI và 50 trên biên, gồm 53 node sinh khi chia cạnh). Chạy với danh sách loại trừ rỗng. Đối chiếu toàn bộ cờ với polygon, xác minh graph giữ nguyên 20.221 node và 35.556 cạnh, còn liên thông mạnh. Ruff và 261 test backend đạt.
+- [x] Khi xuất CSR, chọn cạnh nhỏ nhất theo `(travel_time, edge_key)` cho mỗi cặp có hướng; không để thư viện cộng trọng số cạnh song song. `build_graph_csr` tạo trực tiếp data/indices/indptr. Kiểm thử cạnh song song có thời gian khác nhau và hòa thời gian chọn đúng key.
+- [x] Lưu ánh xạ node ID ↔ chỉ số mảng và cung CSR ↔ cạnh/hình học gốc. `mappings.npz` lưu node ID theo chỉ số CSR, toàn bộ `(u,v,key)` và `arc_edge_indices` theo offset CSR. Kiểm thử predecessor khôi phục đúng cạnh và giữ cờ ứng viên.
+- [x] Xuất đồ thị tham chiếu, CSR `.npz`, geometry, AOI và metadata có cùng phiên bản. CLI `scripts.prepare_graph_csr` đã tạo `backend/data/csr/hanoi-pilot-car-v1-csr-v1/`, 20.221 node/35.556 cung. Đối chiếu 20 nguồn × 20.221 node với NetworkX, seed 20261111, sai số lớn nhất 0 giây. Đã xác minh độc lập mọi ánh xạ cung, geometry cạnh, checksum và graph nguồn. Ruff và 276 test backend đạt.
+- [x] Chuẩn bị geometry để dựng STRtree khi backend khởi động. `geometry.npz` lưu tọa độ EPSG:32648 và offsets cho toàn bộ cạnh theo thứ tự `edge_ids`, gồm cả cạnh song song. Đã thử dựng STRtree từ dữ liệu xuất. Tích hợp runtime thuộc các mốc sau.
 - [ ] Tạo báo cáo validation: P50/P99/max thời gian cạnh, số cạnh dùng tốc độ mặc định, SCC, kích thước đồ thị và kiểm tra tuyến mẫu với NetworkX.
 - [ ] Ghi đủ metadata mục 10.4 của đặc tả, gồm `graph_version` và `weight_profile_version`.
 

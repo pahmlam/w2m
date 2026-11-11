@@ -14,12 +14,48 @@ from shapely.ops import transform
 from app.services.graph_reverse_edges import identify_reverse_edges
 from app.services.graph_split import split_graph_edges
 from scripts.download_osm import _sha256
+from scripts.prepare_graph_candidates import mark_candidate_nodes, prepare_graph_candidates
 from scripts.prepare_graph_split import main, prepare_graph_split
 from scripts.prepare_reverse_edges import prepare_reverse_edges
 
 PROFILE = Path("backend/app/config/speed_profiles/car-v1.yaml")
 TO_WGS84 = Transformer.from_crs("EPSG:32648", "EPSG:4326", always_xy=True)
 AOI = box(499990, 2299990, 500160, 2300050)
+
+
+def test_candidate_flags_preserve_routing_nodes() -> None:
+    graph = nx.MultiDiGraph()
+    graph.add_nodes_from([
+        (1, {"aoi_relation": "inside"}),
+        (-1, {"aoi_relation": "boundary", "generated_by": "edge_split"}),
+        (2, {"aoi_relation": "outside"}),
+        (3, {"aoi_relation": "inside"}),
+    ])
+    graph.add_weighted_edges_from([(1, 2, 5), (2, 3, 7), (3, -1, 11)])
+    before = nx.single_source_dijkstra_path_length(graph, 1)
+
+    mark_candidate_nodes(graph, [3])
+
+    assert nx.get_node_attributes(graph, "in_aoi") == {1: True, -1: True, 2: False, 3: True}
+    assert nx.get_node_attributes(graph, "is_candidate") == {1: True, -1: True, 2: False, 3: False}
+    assert nx.single_source_dijkstra_path_length(graph, 1) == before
+
+
+@pytest.mark.parametrize(("ids", "message"), [
+    ([True], "integer"), ([1.0], "integer"), ([1, 1], "duplicate"), ([42], "Unknown"),
+])
+def test_invalid_candidate_exclusions(ids: list[int], message: str) -> None:
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, aoi_relation="inside")
+    with pytest.raises(ValueError, match=message):
+        mark_candidate_nodes(graph, ids)
+
+
+def test_candidate_requires_aoi_relation() -> None:
+    graph = nx.MultiDiGraph()
+    graph.add_node(1)
+    with pytest.raises(ValueError, match="Invalid aoi_relation"):
+        mark_candidate_nodes(graph, [])
 
 
 def add_road(
@@ -243,6 +279,41 @@ def test_cli_roundtrip_and_provenance(artifacts: tuple[Path, Path], tmp_path: Pa
     assert all(path.read_bytes() == content for path, content in before.items())
     with pytest.raises(FileExistsError):
         prepare_graph_split(source, reverse, output)
+
+
+def test_candidate_artifact_roundtrip(artifacts: tuple[Path, Path], tmp_path: Path) -> None:
+    ox = pytest.importorskip("osmnx")
+    source = prepare_graph_split(*artifacts, tmp_path / "split")
+    before = {path: path.read_bytes() for path in source.iterdir()}
+    exclusions = tmp_path / "exclusions.json"
+    exclusions.write_text("[1]")
+    output = prepare_graph_candidates(source, tmp_path / "candidates", exclusions)
+
+    graph = ox.load_graphml(output / "graph.graphml")
+    assert graph.nodes[1]["in_aoi"] == "True"
+    assert graph.nodes[1]["is_candidate"] == "False"
+    assert all(data["is_candidate"] == "True" for node, data in graph.nodes(data=True) if node != 1)
+    assert nx.is_strongly_connected(graph)
+    report = json.loads((output / "metadata.json").read_text())
+    assert report["stage"] == "candidates"
+    assert report["candidate_node_count"] == 3
+    assert report["excluded_node_count"] == report["excluded_in_aoi_count"] == 1
+    assert report["graph_sha256"] == _sha256(output / "graph.graphml")
+    assert report["source_split_graph_sha256"] == _sha256(source / "graph.graphml")
+    assert (output / "excluded_node_ids.json").read_bytes() == exclusions.read_bytes()
+    assert (output / "reverse_edges.json").read_bytes() == before[source / "reverse_edges.json"]
+    assert all(path.read_bytes() == content for path, content in before.items())
+
+
+def test_candidate_rejects_corrupt_split_artifact(
+    artifacts: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    source = prepare_graph_split(*artifacts, tmp_path / "split")
+    (source / "reverse_edges.json").write_text("{}")
+    output = tmp_path / "candidates"
+    with pytest.raises(ValueError, match="checksum mismatch: reverse_edges.json"):
+        prepare_graph_candidates(source, output)
+    assert not output.exists()
 
 
 @pytest.mark.parametrize("problem", ["graph", "profile", "aoi", "mapping", "source_binding"])
