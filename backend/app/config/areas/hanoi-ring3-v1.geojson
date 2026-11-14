@@ -1,0 +1,37 @@
+{
+  "type": "Feature",
+  "properties": {
+    "area_id": "hanoi-ring3-v1",
+    "scope": "technical-review",
+    "source": "Manually digitized technical approximation of Hanoi Ring Road 3",
+    "reference": "https://itst.gov.vn/vi/news/tin-tuc/4787-4787.html",
+    "description": "Review polygon following Thang Long, Nam Hong, Dong Anh, Ninh Hiep, Phu Dong, Sai Dong, Thanh Tri, Phap Van, Linh Dam, Thanh Xuan and Mai Dich. Straight segments approximate the corridor; not an administrative boundary or surveyed road alignment.",
+    "boundary_rule": "covers",
+    "owner_review_required": true
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[
+      [105.7790, 21.1000],
+      [105.7660, 21.1400],
+      [105.7720, 21.1640],
+      [105.8120, 21.1660],
+      [105.8540, 21.1510],
+      [105.9080, 21.1190],
+      [105.9490, 21.0820],
+      [105.9400, 21.0590],
+      [105.9270, 21.0300],
+      [105.9150, 20.9820],
+      [105.8890, 20.9630],
+      [105.8380, 20.9580],
+      [105.8150, 20.9650],
+      [105.8060, 20.9780],
+      [105.7970, 20.9950],
+      [105.7880, 21.0080],
+      [105.7790, 21.0160],
+      [105.7790, 21.0390],
+      [105.7830, 21.0700],
+      [105.7790, 21.1000]
+    ]]
+  }
+}

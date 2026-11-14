@@ -3,10 +3,11 @@
 Ứng dụng tìm điểm gặp cho 4 người trên mạng đường có hướng tại Hà Nội, dựa trên
 thời gian di chuyển và mức ưu tiên công bằng của cả nhóm.
 
-**Hiện trạng ngày 2026-11-11:** M0 hoàn thành local. M1 đã có pipeline offline từ
-AOI thử nghiệm đến snapshot OSM, chuẩn hóa hình học, gán trọng số `car-v1`, lọc SCC
-lớn nhất, nhận diện cặp cạnh ngược, chia cạnh theo ngưỡng 60 giây/biên AOI,
-gắn cờ ứng viên và xuất CSR cùng ánh xạ. API còn chờ tích hợp graph. Frontend là trang khởi tạo,
+**Hiện trạng ngày 2026-11-14:** M0 và M1 hoàn thành local trên AOI kỹ thuật Vành đai 3
+đã được chủ dự án duyệt. Bundle 3 km có 149.213 node, 290.952 cạnh, 96.410 ứng viên;
+TC-15 đạt 200/200 cặp khi đối chiếu buffer 6 km. Xem
+[báo cáo nghiệm thu M1](docs/reports/2026-11-14-m1-acceptance.md).
+API còn chờ tích hợp graph. Frontend là trang khởi tạo,
 chưa gọi backend hoặc hiển thị bản đồ.
 Thuật toán tìm điểm gặp, cache/rerank, Docker và nghiệm thu MVP chưa hoàn thành.
 
@@ -14,6 +15,7 @@ Thuật toán tìm điểm gặp, cache/rerank, Docker và nghiệm thu MVP chư
 - [Kế hoạch MVP và checklist](docs/plans/W2M-MVP-Plan.md)
 - [Bổ sung hợp đồng M0](docs/spec/W2M-M0-Contract-Addendum.md)
 - [Hướng dẫn dữ liệu và tái tạo artifact](backend/data/README.md)
+- [Dựng AOI Vành đai 3, pipeline offline và TC-15](backend/data/README.md#aoi-vành-đai-3-và-nghiệm-thu-m1)
 - [Development journals](docs/journals/)
 
 ## Yêu cầu và cài đặt
@@ -113,6 +115,7 @@ Polygon AOI nguồn
   → prepare_graph_split     → cạnh ≤ 60 giây, cắt biên AOI, lineage và mapping mới
   → prepare_graph_candidates → cờ phạm vi AOI và điều kiện làm điểm gặp
   → prepare_graph_csr        → CSR, ánh xạ node/cung và geometry có phiên bản
+  → validate_graph           → báo cáo validation và metadata đầy đủ
 ```
 
 Mỗi CLI chạy riêng; các bước truyền dữ liệu qua file, không tự gọi bước kế tiếp.
@@ -191,6 +194,11 @@ PYTHONPATH=backend uv run --project backend --locked --extra data python -m scri
   --candidates-dir backend/data/candidates/drive-20261106T092834Z-car-v1-candidates-v1 \
   --output-dir backend/data/csr/hanoi-pilot-car-v1-csr-v1 \
   --graph-version hanoi-pilot-car-v1-csr-v1
+
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.validate_graph \
+  --csr-dir backend/data/csr/hanoi-pilot-car-v1-csr-v1 \
+  --aoi-metadata backend/data/aoi.metadata.json \
+  --output-dir backend/data/validated/hanoi-pilot-car-v1-csr-v1
 ```
 
 Các CLI graph/snapshot từ chối ghi đè thư mục đích: chọn đích mới khi tái tạo và
@@ -239,8 +247,10 @@ Frontend đọc `frontend/.env.local`; xem [mẫu cấu hình](frontend/.env.exa
 sau. Mọi biến `NEXT_PUBLIC_*` đều công khai; không đặt secret vào đó. MapLibre đã
 có dependency nhưng chưa được dùng để hiển thị bản đồ, chưa chọn tile provider.
 
-- Bước kế tiếp là hoàn thiện báo cáo validation và metadata M1, rà soát AOI toàn
-  nội đô và vùng bị SCC loại, kiểm thử buffer TC-15.
+- Bước kế tiếp là M2: snapping, overlay, Dijkstra, OWA và dựng tuyến tham chiếu
+  bằng NetworkX; nghiệm thu TC-01–TC-12.
+- Một số vùng trong AOI xa đường thuộc SCC được giữ hơn 150 m; đầu vào tại đó
+  có thể trả `SNAP_FAILED`. Xem báo cáo M1 và bản đồ vùng bị loại.
 - Graph sau chia đạt ngưỡng 60 giây; artifact SCC trước chia vẫn được giữ để truy vết.
 - `car-v1` là tốc độ giả định, chưa hiệu chỉnh. Mô hình chưa xét cấm rẽ, chi phí rẽ
   hoặc giao thông thời gian thực; kết quả sau này là thời gian ước lượng.

@@ -422,3 +422,108 @@ Artifact thử nghiệm `csr/hanoi-pilot-car-v1-csr-v1/` có 20.221 node, 35.556
 2.504 ứng viên. Trong artifact này mọi cặp node có hướng đều có một cạnh.
 20 nguồn × 20.221 node cho sai số khoảng cách lớn nhất 0 giây. Kiểm thử graph
 tổng hợp kiểm tra cạnh song song, hòa thời gian, hướng đi, predecessor và hình học.
+
+## Validation và hoàn thiện metadata
+
+`scripts.validate_graph` nhận `--csr-dir`, `--aoi-metadata` và `--output-dir` mới.
+Tệp metadata AOI phải nằm cùng thư mục với `aoi.geojson` từ bước `prepare_aoi`.
+CLI kiểm tra polygon này khớp AOI trong bundle, đối chiếu diện tích EPSG:32648,
+và lấy `area_id`, `buffer_m` từ metadata AOI. Buffer được ghi nhận theo cấu hình
+đã chuẩn bị. Kiểm thử độ nhạy buffer TC-15 được theo dõi riêng.
+
+Bundle đầu ra giữ graph và các mảng của bản CSR, bổ sung metadata theo mục 10.4,
+`aoi.metadata.json` và `validation.json`. `graph_version` và `build_date` mô tả
+graph gốc. `validated_at` trong báo cáo là thời điểm validation. Metadata lưu
+checksum của cả báo cáo và metadata AOI. CLI từ chối ghi đè thư mục đã tồn tại.
+
+Báo cáo gồm các kiểm tra checksum, CSR, ánh xạ, geometry, đơn vị, cờ ứng viên,
+SCC và ngưỡng thời gian cạnh. Thống kê P50/P99/max và số cạnh dùng tốc độ mặc định
+được tính lại trên graph cuối. Số node/cạnh bị SCC loại được lấy từ metadata nguồn.
+Tệp cũng ghi kích thước file, bộ nhớ CSR, phiên bản thư viện, môi trường Python,
+checksum mã validation và seed lấy mẫu.
+
+Với tối đa 20 nguồn và 10 đích mỗi nguồn, CLI đối chiếu khoảng cách với NetworkX
+và dựng tuyến từ predecessor SciPy. Mỗi mẫu ghi node nguồn/đích, các ID cạnh theo
+thứ tự, khoảng cách mạng và sai số tổng thời gian cạnh. Kiểm tra edge key áp dụng
+quy tắc `(travel_time, edge_key)` và sai số tuyến theo mục 3.6 của spec.
+
+`status: passed` trong báo cáo xác nhận các kiểm tra được liệt kê. Danh sách
+`pending_acceptance` ghi các bước nghiệm thu còn mở như rà soát bản đồ AOI/SCC,
+TC-15, TC-16 và hiệu chỉnh tốc độ.
+
+## AOI Vành đai 3 và nghiệm thu M1
+
+`backend/app/config/areas/hanoi-ring3-v1.geojson` là polygon kỹ thuật 304,56 km²
+để rà soát phạm vi Vành đai 3, không phải ranh giới hành chính hoặc tim đường
+được đo đạc. Thuộc tính `owner_review_required` theo dõi việc duyệt phạm vi.
+Polygon thử nghiệm và artifact cũ được giữ nguyên. Không đổi `.env` đang sử dụng.
+Chủ dự án đã duyệt polygon kỹ thuật này để nghiệm thu M1 ngày 2026-11-14;
+quyết định được lưu trong báo cáo nghiệm thu, không sửa provenance polygon nguồn.
+
+Chuẩn bị hai vùng từ cùng polygon, chạy từ thư mục gốc:
+
+```sh
+for buffer in 3000 6000; do
+  PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.prepare_aoi \
+    --source backend/app/config/areas/hanoi-ring3-v1.geojson \
+    --aoi-output "backend/data/areas/hanoi-ring3-v1-$buffer/aoi.geojson" \
+    --routing-output "backend/data/areas/hanoi-ring3-v1-$buffer/routing_area.geojson" \
+    --metadata-output "backend/data/areas/hanoi-ring3-v1-$buffer/aoi.metadata.json" \
+    --buffer-m "$buffer"
+done
+```
+
+Tải OSM là bước offline chủ động duy nhất cần mạng. Dùng cutoff cố định để tái tạo:
+
+```sh
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.download_osm \
+  --routing-area backend/data/areas/hanoi-ring3-v1-6000/routing_area.geojson \
+  --output-dir backend/data/osm/ring3-20261106T092834Z-6000 \
+  --snapshot-at 2026-11-06T09:28:34Z
+```
+
+`scripts.build_graph` chạy các bước hiện có từ snapshot đến validation, không
+gọi mạng. Nó kiểm tra checksum và vùng phủ; cắt graph thô bằng polygon định tuyến
+theo node, giữ hướng/cạnh song song. Hai bản dùng đúng cùng snapshot gốc và
+speed profile, rồi lọc SCC riêng. Manifest crop giữ provenance và checksum nguồn.
+
+```sh
+for buffer in 3000 6000; do
+  PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.build_graph \
+    --snapshot-dir backend/data/osm/ring3-20261106T092834Z-6000 \
+    --area-dir "backend/data/areas/hanoi-ring3-v1-$buffer" \
+    --profile backend/app/config/speed_profiles/car-v1.yaml \
+    --output-dir "backend/data/builds/hanoi-ring3-car-v1-$buffer-v1" \
+    --graph-version "hanoi-ring3-car-v1-$buffer-v1"
+done
+
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.validate_buffer \
+  --base-dir backend/data/builds/hanoi-ring3-car-v1-3000-v1 \
+  --reference-dir backend/data/builds/hanoi-ring3-car-v1-6000-v1 \
+  --output backend/data/reports/hanoi-ring3-tc15-v1.json
+
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.render_graph_review \
+  --scc-dir backend/data/builds/hanoi-ring3-car-v1-3000-v1/scc \
+  --output backend/data/reviews/hanoi-ring3-v1-3000.svg
+```
+
+`build_graph` từ chối thư mục đích đã có. Nếu một bước thất bại, các bước đã
+hoàn thành vẫn còn để kiểm tra; sửa nguyên nhân rồi chọn thư mục/version mới
+hoặc chạy tiếp bằng từng CLI hiện có, không sửa artifact nguồn.
+
+TC-15 dùng seed `20261114`, lấy đều không hoàn lại 200 cặp node OSM gốc có hướng,
+hai đầu nằm trong AOI và cách biên không quá 1.000 m. Không dùng node chia cạnh,
+không lấy cặp trùng nguồn/đích. Sai lệch là `abs(t_3km - t_6km) / t_6km` trên
+thời gian gốc; cặp mất node hoặc không tới được trong graph đối chiếu là thất bại.
+Ít nhất 198/200 cặp phải lệch không quá 1%. Báo cáo thất bại vẫn được lưu và CLI
+trả exit code 1; không tự giảm tiêu chuẩn hoặc loại cặp khỏi mẫu.
+
+SVG mở bằng trình duyệt, không cần tile: xanh là biên AOI, xám là đường giữ lại,
+cam là đường lớn, đỏ là node/cạnh bị SCC loại. Cần rà soát tác động mất đường
+đến snapping, không coi mọi vị trí trong AOI đều snap được trong 150 m.
+CLI còn xuất JSON cùng tên, đo khoảng cách từ node bị loại và trung điểm feature
+cạnh bị loại tới đường được giữ. Đây là mẫu hình học, không chứng minh toàn bộ
+phạm vi snap được. Bản SVG kèm thống kê của lần nghiệm thu local có hậu tố `-v2`.
+`pending_acceptance` trong validation là trạng thái tại lúc xuất bundle;
+kết quả TC-15 và quyết định rà soát sau đó được lưu riêng, không sửa báo cáo cũ.
+TC-16, hiệu chỉnh tốc độ và tích hợp API/runtime thuộc các mốc tiếp theo.

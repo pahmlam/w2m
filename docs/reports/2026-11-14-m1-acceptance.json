@@ -1,0 +1,1835 @@
+{
+  "milestone": "M1",
+  "status": "passed",
+  "created_at": "2026-11-14T09:09:29.767984+00:00",
+  "git_head": "6a585abc2ee3f491f7e60d8e57c9b66812b70232",
+  "working_tree_has_uncommitted_changes": true,
+  "implementation_sha256": {
+    "backend/scripts/build_graph.py": "062c8887a95aa3af62ad74bfcf1d9f2a554e0c01fb151cc337a6c96da34c0d5b",
+    "backend/scripts/validate_graph.py": "9f9959cf603a29a04a76951792177285a8ef14765ddddd99f72f4aa2028ec059",
+    "backend/scripts/validate_buffer.py": "d9a3bc180b66eb31dc5035a85e3f3bed3e8bac54be5521e8a8edaa01c9af7eca",
+    "backend/scripts/render_graph_review.py": "077bb0fd6f11c4f6a0fc4a1ce1a0ef5f59f6b6da58143e520aef155ecb6ccccf",
+    "backend/app/config/areas/hanoi-ring3-v1.geojson": "52c8a51838b2aece88d4e999825c1b3b7aef72cf28438862de21922213fd711b",
+    "backend/tests/test_build_graph.py": "761266528a0e0d6544548d2f6608aae7516a68b5522805ae25233421ae2b352b",
+    "backend/tests/test_validate_buffer.py": "bd418f5012949550a7b03b312481bb5cec0680d2178d149fd7cb75c626464ec1",
+    "backend/tests/test_render_graph_review.py": "ab6828f42c17372201eaee9ecabb68a6c9034d38d0774af4c885be7102288d8e",
+    "backend/tests/test_validate_graph.py": "4854818612e54738310efa2e1c66749b080939549abef155002bf896517d4db2"
+  },
+  "environment": {
+    "python": "3.12.13",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "libraries": {
+      "networkx": "3.7",
+      "numpy": "2.5.4",
+      "scipy": "1.18.1",
+      "shapely": "2.2.0",
+      "pyproj": "3.8.0",
+      "osmnx": "2.1.1"
+    }
+  },
+  "aoi": {
+    "area_id": "hanoi-ring3-v1",
+    "area_km2": 304.5585748756978,
+    "source": "backend/app/config/areas/hanoi-ring3-v1.geojson",
+    "owner_approval": "Approved explicitly by project owner in task conversation on 2026-11-14",
+    "scope": "Technical approximation for M1; not an administrative or surveyed Ring Road 3 boundary",
+    "boundary_rule": "covers"
+  },
+  "snapshot_manifest": {
+    "schema_version": 1,
+    "snapshot_id": "ring3-20261106T092834Z-6000",
+    "source": "OpenStreetMap",
+    "source_date": "2026-11-06",
+    "snapshot_at": "2026-11-06T09:28:34Z",
+    "download_started_at": "2026-11-14T08:53:58.737134+00:00",
+    "download_completed_at": "2026-11-14T08:55:38.911753+00:00",
+    "download_attempts": 1,
+    "overpass_url": "https://overpass-api.de/api",
+    "overpass_settings": "[out:json][timeout:{timeout}]{maxsize}[date:\"2026-11-06T09:28:34Z\"]",
+    "requests_timeout_seconds": 180,
+    "osmnx_version": "2.1.1",
+    "graph_options": {
+      "network_type": "drive",
+      "simplify": false,
+      "retain_all": true,
+      "truncate_by_edge": false
+    },
+    "useful_tags_way": [
+      "access",
+      "area",
+      "bridge",
+      "est_width",
+      "highway",
+      "junction",
+      "landuse",
+      "lanes",
+      "maxspeed",
+      "name",
+      "oneway",
+      "ref",
+      "service",
+      "tunnel",
+      "width"
+    ],
+    "crs": "epsg:4326",
+    "node_count": 217991,
+    "edge_count": 430425,
+    "routing_area_sha256": "d081aefa533b812ed2c0184000255b9c4303316b5999c88edf869f020ac982d1",
+    "graph_sha256": "d786d0a2f5934b8f345325fe284d606a84fc5cd66e3e3850d0883821482930cd",
+    "response_cache_file_count": 1,
+    "attribution": "© OpenStreetMap contributors",
+    "license": "ODbL-1.0"
+  },
+  "bundles": [
+    {
+      "graph_version": "hanoi-ring3-car-v1-3000-v1",
+      "weight_profile_version": "car-v1",
+      "node_count": 149213,
+      "edge_count": 290952,
+      "csr_arc_count": 290952,
+      "candidate_node_count": 96410,
+      "tau_p50": 3.7453825076467626,
+      "tau_p99": 33.788324079223486,
+      "tau_max": 59.93146169512586,
+      "default_speed_edge_count": 75,
+      "maxspeed_capped_edge_count": 64,
+      "scc_removed_nodes": 3817,
+      "scc_removed_edges": 5779,
+      "buffer_m": 3000.0,
+      "path": "backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated",
+      "metadata_sha256": "3e46ec97a1aee0403ffc89170d0528a94d18546dba22adab9983c8b6cc9566b3",
+      "validation_sha256": "338b2317ffc06e625d230a86eec0ee38d881671a78107f22e916b0e2638877e9",
+      "checks": {
+        "checksums": "passed",
+        "csr_weights_and_mappings": "passed",
+        "geometry_and_units": "passed",
+        "speed_profile": "passed",
+        "scc": "passed",
+        "candidate_flags": "passed",
+        "aoi_geometry": "passed",
+        "metadata": "passed",
+        "edge_time_cap": "passed",
+        "networkx_distances": "passed",
+        "sample_routes": "passed"
+      },
+      "distances": {
+        "seed": 20261111,
+        "source_count": 20,
+        "distance_comparison_count": 2984260,
+        "max_distance_error_seconds": 0.0,
+        "route_count": 200
+      },
+      "max_route_error_seconds": 3.183231456205249e-12
+    },
+    {
+      "graph_version": "hanoi-ring3-car-v1-6000-v1",
+      "weight_profile_version": "car-v1",
+      "node_count": 213143,
+      "edge_count": 422978,
+      "csr_arc_count": 422978,
+      "candidate_node_count": 96414,
+      "tau_p50": 3.945971364004527,
+      "tau_p99": 35.54316093444055,
+      "tau_max": 59.93146169512586,
+      "default_speed_edge_count": 75,
+      "maxspeed_capped_edge_count": 85,
+      "scc_removed_nodes": 5632,
+      "scc_removed_edges": 8878,
+      "buffer_m": 6000.0,
+      "path": "backend/data/builds/hanoi-ring3-car-v1-6000-v1/validated",
+      "metadata_sha256": "6c84a50142ba81adc55d17ab8028c22c6d822801896c4216bcda423ebbed8604",
+      "validation_sha256": "661563ae3e8b0866b33f8bce74f69f4f1d31aab0a907401119e42ea3c4e44a74",
+      "checks": {
+        "checksums": "passed",
+        "csr_weights_and_mappings": "passed",
+        "geometry_and_units": "passed",
+        "speed_profile": "passed",
+        "scc": "passed",
+        "candidate_flags": "passed",
+        "aoi_geometry": "passed",
+        "metadata": "passed",
+        "edge_time_cap": "passed",
+        "networkx_distances": "passed",
+        "sample_routes": "passed"
+      },
+      "distances": {
+        "seed": 20261111,
+        "source_count": 20,
+        "distance_comparison_count": 4262860,
+        "max_distance_error_seconds": 0.0,
+        "route_count": 200
+      },
+      "max_route_error_seconds": 5.4569682106375694e-12
+    }
+  ],
+  "tc15": {
+    "test_id": "TC-15",
+    "status": "passed",
+    "created_at": "2026-11-14T09:08:26.969349+00:00",
+    "seed": 20261114,
+    "implementation_sha256": "d9a3bc180b66eb31dc5035a85e3f3bed3e8bac54be5521e8a8edaa01c9af7eca",
+    "python": "3.12.13",
+    "area_id": "hanoi-ring3-v1",
+    "snapshot_at": "2026-11-06T09:28:34Z",
+    "source_manifest_sha256": "ea934d78cdadd6b675b61874884d030dfa1241aca7492685134bcea0450dfdcd",
+    "weight_profile_version": "car-v1",
+    "graph_versions": [
+      "hanoi-ring3-car-v1-3000-v1",
+      "hanoi-ring3-car-v1-6000-v1"
+    ],
+    "metadata_sha256": [
+      "3e46ec97a1aee0403ffc89170d0528a94d18546dba22adab9983c8b6cc9566b3",
+      "6c84a50142ba81adc55d17ab8028c22c6d822801896c4216bcda423ebbed8604"
+    ],
+    "buffers_meters": [
+      3000.0,
+      6000.0
+    ],
+    "boundary_band_meters": 1000,
+    "eligible_node_count": 20436,
+    "sampling": "uniform distinct directed original-OSM-node pairs; no self pairs",
+    "relative_error_definition": "abs(base_seconds - reference_seconds) / reference_seconds",
+    "relative_error_limit": 0.01,
+    "required_pass_count": 198,
+    "pair_count": 200,
+    "passed_pair_count": 200,
+    "pairs": [
+      {
+        "source_node_id": 12606538120,
+        "target_node_id": 3826703912,
+        "base_seconds": 2516.2262047036133,
+        "reference_seconds": 2516.2262047036133,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 1222039332,
+        "target_node_id": 2186605801,
+        "base_seconds": 1449.3088829392182,
+        "reference_seconds": 1449.3088829392182,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14152713143,
+        "target_node_id": 9734088155,
+        "base_seconds": 2598.793868760443,
+        "reference_seconds": 2598.793868760443,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8340806258,
+        "target_node_id": 14233862382,
+        "base_seconds": 1471.8899260031264,
+        "reference_seconds": 1471.8899260031264,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710462107,
+        "target_node_id": 5716490241,
+        "base_seconds": 460.18729132804594,
+        "reference_seconds": 460.18729132804594,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 3779377398,
+        "target_node_id": 14314329169,
+        "base_seconds": 1535.416413520602,
+        "reference_seconds": 1535.416413520602,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11025863737,
+        "target_node_id": 5722199416,
+        "base_seconds": 916.7631688782614,
+        "reference_seconds": 916.7631688782614,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 3826703933,
+        "target_node_id": 5719266743,
+        "base_seconds": 1446.6137793633652,
+        "reference_seconds": 1446.6137793633652,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13031351610,
+        "target_node_id": 3776562859,
+        "base_seconds": 2026.7888855195094,
+        "reference_seconds": 2026.7888855195094,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12126165415,
+        "target_node_id": 8333076228,
+        "base_seconds": 2410.626043846232,
+        "reference_seconds": 2410.626043846232,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 106449341,
+        "target_node_id": 5716412074,
+        "base_seconds": 1210.1246083942863,
+        "reference_seconds": 1210.1246083942863,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6625028335,
+        "target_node_id": 14333208519,
+        "base_seconds": 1673.578450852988,
+        "reference_seconds": 1673.578450852988,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10228207541,
+        "target_node_id": 8340635477,
+        "base_seconds": 1376.4798273781473,
+        "reference_seconds": 1376.4798273781473,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6324129387,
+        "target_node_id": 8823233261,
+        "base_seconds": 903.5992144304242,
+        "reference_seconds": 903.5992144304242,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14286236293,
+        "target_node_id": 12992402797,
+        "base_seconds": 2412.2017865021053,
+        "reference_seconds": 2412.2017865021053,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12014595881,
+        "target_node_id": 5721498911,
+        "base_seconds": 2455.866863746137,
+        "reference_seconds": 2455.866863746137,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13546529852,
+        "target_node_id": 5466689335,
+        "base_seconds": 124.1085600449792,
+        "reference_seconds": 124.1085600449792,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12738394293,
+        "target_node_id": 8292737949,
+        "base_seconds": 2220.2180775673933,
+        "reference_seconds": 2220.2180775673933,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6189718422,
+        "target_node_id": 5006217925,
+        "base_seconds": 1622.6443749053674,
+        "reference_seconds": 1622.6443749053674,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13972076889,
+        "target_node_id": 5722199408,
+        "base_seconds": 598.5050341389511,
+        "reference_seconds": 598.5050341389511,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12159544868,
+        "target_node_id": 4844069847,
+        "base_seconds": 2510.1640277940182,
+        "reference_seconds": 2510.1640277940182,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710585087,
+        "target_node_id": 11108159121,
+        "base_seconds": 1125.2810025777383,
+        "reference_seconds": 1125.2810025777383,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 2410528108,
+        "target_node_id": 8493462460,
+        "base_seconds": 1406.456342285796,
+        "reference_seconds": 1406.456342285796,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 1494905051,
+        "target_node_id": 8340897842,
+        "base_seconds": 1686.2164845454495,
+        "reference_seconds": 1686.2164845454495,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12169677223,
+        "target_node_id": 8276842863,
+        "base_seconds": 2117.998613319128,
+        "reference_seconds": 2117.998613319128,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710543984,
+        "target_node_id": 4889008044,
+        "base_seconds": 1424.0598383003626,
+        "reference_seconds": 1424.0598383003626,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 3779397734,
+        "target_node_id": 6591909721,
+        "base_seconds": 1290.1961996726543,
+        "reference_seconds": 1290.1961996726543,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 4844069885,
+        "target_node_id": 8266176340,
+        "base_seconds": 498.64775142037183,
+        "reference_seconds": 498.64775142037183,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12014595944,
+        "target_node_id": 5719266613,
+        "base_seconds": 412.5803794905237,
+        "reference_seconds": 412.5803794905237,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 4911944190,
+        "target_node_id": 6652010791,
+        "base_seconds": 1718.2307474334903,
+        "reference_seconds": 1718.2307474334903,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6610986045,
+        "target_node_id": 5686526689,
+        "base_seconds": 1766.7331025569945,
+        "reference_seconds": 1766.7331025569945,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10091658990,
+        "target_node_id": 3779360709,
+        "base_seconds": 1578.137680720225,
+        "reference_seconds": 1578.137680720225,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8332934819,
+        "target_node_id": 14275683573,
+        "base_seconds": 1917.044654527981,
+        "reference_seconds": 1917.044654527981,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5686384933,
+        "target_node_id": 5716250409,
+        "base_seconds": 1016.2297462983828,
+        "reference_seconds": 1016.2297462983828,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14282324903,
+        "target_node_id": 12169414390,
+        "base_seconds": 2278.1280315625713,
+        "reference_seconds": 2278.1280315625713,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8337955626,
+        "target_node_id": 12573804648,
+        "base_seconds": 2143.5246526258074,
+        "reference_seconds": 2143.5246526258074,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11108159091,
+        "target_node_id": 13449481149,
+        "base_seconds": 1993.793094438032,
+        "reference_seconds": 1993.793094438032,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5719683273,
+        "target_node_id": 8337955624,
+        "base_seconds": 1457.5468692611848,
+        "reference_seconds": 1457.5468692611848,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5468508039,
+        "target_node_id": 4224823311,
+        "base_seconds": 2052.2100313616056,
+        "reference_seconds": 2052.2100313616056,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8324026433,
+        "target_node_id": 12878567759,
+        "base_seconds": 2881.700331324298,
+        "reference_seconds": 2881.700331324298,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 1893247916,
+        "target_node_id": 12600364147,
+        "base_seconds": 2802.6532402383964,
+        "reference_seconds": 2802.6532402383964,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5721677404,
+        "target_node_id": 3779242618,
+        "base_seconds": 1860.796204451184,
+        "reference_seconds": 1860.796204451184,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11108159038,
+        "target_node_id": 2733170864,
+        "base_seconds": 2189.7286501208546,
+        "reference_seconds": 2189.7286501208546,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716980979,
+        "target_node_id": 5721500459,
+        "base_seconds": 1549.571146971592,
+        "reference_seconds": 1549.571146971592,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 3878471485,
+        "target_node_id": 4931817670,
+        "base_seconds": 2304.2350945266685,
+        "reference_seconds": 2304.2350945266685,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6396648740,
+        "target_node_id": 6611156736,
+        "base_seconds": 2683.288630716746,
+        "reference_seconds": 2683.288630716746,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5721500419,
+        "target_node_id": 14152945592,
+        "base_seconds": 1300.3608490287131,
+        "reference_seconds": 1300.3608490287131,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710586986,
+        "target_node_id": 8337130438,
+        "base_seconds": 2175.6864904197546,
+        "reference_seconds": 2175.6864904197546,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11014102425,
+        "target_node_id": 8340629388,
+        "base_seconds": 1882.8275615341088,
+        "reference_seconds": 1882.8275615341088,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13798275388,
+        "target_node_id": 14005627548,
+        "base_seconds": 1374.9066805734867,
+        "reference_seconds": 1374.9066805734867,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5703645223,
+        "target_node_id": 13817820434,
+        "base_seconds": 2604.7057218725313,
+        "reference_seconds": 2604.7057218725313,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8046800269,
+        "target_node_id": 10097990513,
+        "base_seconds": 500.5112907315637,
+        "reference_seconds": 500.5112907315637,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 3826704071,
+        "target_node_id": 11211504696,
+        "base_seconds": 2391.5042840057195,
+        "reference_seconds": 2391.5042840057195,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6625116150,
+        "target_node_id": 9708366515,
+        "base_seconds": 2147.7601948700635,
+        "reference_seconds": 2147.7601948700635,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 1695508241,
+        "target_node_id": 6610891631,
+        "base_seconds": 658.2312607751052,
+        "reference_seconds": 658.2312607751052,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5718949113,
+        "target_node_id": 5722201023,
+        "base_seconds": 1777.1829227355724,
+        "reference_seconds": 1777.1829227355724,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716775546,
+        "target_node_id": 5716453451,
+        "base_seconds": 750.1582090696985,
+        "reference_seconds": 750.1582090696985,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6394859327,
+        "target_node_id": 2706511064,
+        "base_seconds": 1179.1215528958007,
+        "reference_seconds": 1179.1215528958007,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14048284824,
+        "target_node_id": 10203959154,
+        "base_seconds": 2146.160796272589,
+        "reference_seconds": 2146.160796272589,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14159201217,
+        "target_node_id": 13806497655,
+        "base_seconds": 2570.7893943021254,
+        "reference_seconds": 2570.7893943021254,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6394859334,
+        "target_node_id": 5686425020,
+        "base_seconds": 2243.7863556239804,
+        "reference_seconds": 2243.7863556239804,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13159216606,
+        "target_node_id": 10738944963,
+        "base_seconds": 523.3915653457242,
+        "reference_seconds": 523.3915653457242,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10781281214,
+        "target_node_id": 8292737959,
+        "base_seconds": 1551.421494951477,
+        "reference_seconds": 1551.421494951477,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8337955637,
+        "target_node_id": 2918304836,
+        "base_seconds": 329.31567366823435,
+        "reference_seconds": 329.31567366823435,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14159184986,
+        "target_node_id": 6324154669,
+        "base_seconds": 2829.491906604465,
+        "reference_seconds": 2829.491906604465,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 1897830310,
+        "target_node_id": 2918311692,
+        "base_seconds": 1747.5704890402078,
+        "reference_seconds": 1747.5704890402078,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710185572,
+        "target_node_id": 14182290539,
+        "base_seconds": 2109.9649394228145,
+        "reference_seconds": 2109.9649394228145,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8333068207,
+        "target_node_id": 6600425299,
+        "base_seconds": 1750.168359250089,
+        "reference_seconds": 1750.168359250089,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10312557507,
+        "target_node_id": 10308025420,
+        "base_seconds": 436.1862835500564,
+        "reference_seconds": 436.1862835500564,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 2733171061,
+        "target_node_id": 5722201072,
+        "base_seconds": 2218.1546721483032,
+        "reference_seconds": 2218.1546721483032,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12982758363,
+        "target_node_id": 3779377390,
+        "base_seconds": 2003.0330765315828,
+        "reference_seconds": 2003.0330765315828,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12969216485,
+        "target_node_id": 12556858586,
+        "base_seconds": 260.2813840214432,
+        "reference_seconds": 260.2813840214432,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14159177586,
+        "target_node_id": 5684444900,
+        "base_seconds": 1029.580675996865,
+        "reference_seconds": 1029.580675996865,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6324129423,
+        "target_node_id": 4224823490,
+        "base_seconds": 2136.1433056366127,
+        "reference_seconds": 2136.1433056366127,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8340605889,
+        "target_node_id": 5719322419,
+        "base_seconds": 1204.8984163998082,
+        "reference_seconds": 1204.8984163998082,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6185888479,
+        "target_node_id": 5710691042,
+        "base_seconds": 2173.785831103648,
+        "reference_seconds": 2173.785831103648,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 440776422,
+        "target_node_id": 8340649823,
+        "base_seconds": 2492.454758723468,
+        "reference_seconds": 2492.454758723468,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10216660032,
+        "target_node_id": 11108158990,
+        "base_seconds": 1650.9388776128899,
+        "reference_seconds": 1650.9388776128899,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710669718,
+        "target_node_id": 5716411021,
+        "base_seconds": 975.8902043175519,
+        "reference_seconds": 975.8902043175519,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5721500325,
+        "target_node_id": 1893251090,
+        "base_seconds": 680.4001168928459,
+        "reference_seconds": 680.4001168928459,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 7995392982,
+        "target_node_id": 14161773513,
+        "base_seconds": 826.8313309724841,
+        "reference_seconds": 826.8313309724841,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14179925769,
+        "target_node_id": 6178451413,
+        "base_seconds": 2036.2642239388854,
+        "reference_seconds": 2036.2642239388854,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10902652832,
+        "target_node_id": 8340605901,
+        "base_seconds": 2237.9998458819155,
+        "reference_seconds": 2237.9998458819155,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6178500949,
+        "target_node_id": 3987362562,
+        "base_seconds": 1244.0170338596895,
+        "reference_seconds": 1244.0170338596895,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5698303363,
+        "target_node_id": 1613088905,
+        "base_seconds": 805.8310091757289,
+        "reference_seconds": 805.8310091757289,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716323672,
+        "target_node_id": 13161330153,
+        "base_seconds": 1284.517826683119,
+        "reference_seconds": 1284.517826683119,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710282559,
+        "target_node_id": 5717107475,
+        "base_seconds": 2094.7335142197744,
+        "reference_seconds": 2094.7335142197744,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8823018406,
+        "target_node_id": 6677865917,
+        "base_seconds": 2473.0699452699882,
+        "reference_seconds": 2473.0699452699882,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5828713078,
+        "target_node_id": 11556414949,
+        "base_seconds": 2081.8562693658596,
+        "reference_seconds": 2081.8562693658596,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 9708366512,
+        "target_node_id": 5686425953,
+        "base_seconds": 1741.9182232906003,
+        "reference_seconds": 1741.9182232906003,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10183754649,
+        "target_node_id": 5716250415,
+        "base_seconds": 841.0219334366424,
+        "reference_seconds": 841.0219334366424,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8831747979,
+        "target_node_id": 5710117908,
+        "base_seconds": 1259.9282354845259,
+        "reference_seconds": 1259.9282354845259,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 282887421,
+        "target_node_id": 4931817115,
+        "base_seconds": 2701.9570972658557,
+        "reference_seconds": 2701.9570972658557,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 9255633619,
+        "target_node_id": 7842142433,
+        "base_seconds": 443.9704214662737,
+        "reference_seconds": 443.9704214662737,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8831790818,
+        "target_node_id": 10197103394,
+        "base_seconds": 2825.2465470652487,
+        "reference_seconds": 2825.2465470652487,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 1758659098,
+        "target_node_id": 14143930614,
+        "base_seconds": 910.1137386761701,
+        "reference_seconds": 910.1137386761701,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8732196697,
+        "target_node_id": 8740160746,
+        "base_seconds": 441.5211728069815,
+        "reference_seconds": 441.5211728069815,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8292738049,
+        "target_node_id": 5686497468,
+        "base_seconds": 252.68773363697372,
+        "reference_seconds": 252.68773363697372,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8822920448,
+        "target_node_id": 5707378286,
+        "base_seconds": 2007.6387606586975,
+        "reference_seconds": 2007.6387606586975,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8349115879,
+        "target_node_id": 8344659588,
+        "base_seconds": 1183.921489770811,
+        "reference_seconds": 1183.921489770811,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6417219405,
+        "target_node_id": 12982758365,
+        "base_seconds": 503.2862132630571,
+        "reference_seconds": 503.2862132630571,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710585086,
+        "target_node_id": 440772995,
+        "base_seconds": 503.1290066308898,
+        "reference_seconds": 503.1290066308898,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8332866879,
+        "target_node_id": 5718880312,
+        "base_seconds": 2638.834493671603,
+        "reference_seconds": 2638.834493671603,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 4904142807,
+        "target_node_id": 12556858582,
+        "base_seconds": 2357.0165976212816,
+        "reference_seconds": 2357.0165976212816,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 4912620635,
+        "target_node_id": 5686425952,
+        "base_seconds": 1466.6725499528811,
+        "reference_seconds": 1466.6725499528811,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8337098320,
+        "target_node_id": 8341494270,
+        "base_seconds": 1470.002777144444,
+        "reference_seconds": 1470.002777144444,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6178501134,
+        "target_node_id": 9714471665,
+        "base_seconds": 2128.467746297884,
+        "reference_seconds": 2128.467746297884,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 1897829053,
+        "target_node_id": 14279592403,
+        "base_seconds": 961.3054746007715,
+        "reference_seconds": 961.3054746007715,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 3779259937,
+        "target_node_id": 11012408280,
+        "base_seconds": 1021.5770484654915,
+        "reference_seconds": 1021.5770484654915,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12169193238,
+        "target_node_id": 4789919293,
+        "base_seconds": 1492.591371181465,
+        "reference_seconds": 1492.591371181465,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12606538121,
+        "target_node_id": 10216643654,
+        "base_seconds": 1387.0469238692608,
+        "reference_seconds": 1387.0469238692608,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11991288968,
+        "target_node_id": 6185887697,
+        "base_seconds": 1520.497941508901,
+        "reference_seconds": 1520.497941508901,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6672724156,
+        "target_node_id": 8342777160,
+        "base_seconds": 2558.7052453255915,
+        "reference_seconds": 2558.7052453255915,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5686405072,
+        "target_node_id": 10608440418,
+        "base_seconds": 2189.166744681127,
+        "reference_seconds": 2189.166744681127,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6324129431,
+        "target_node_id": 11556414966,
+        "base_seconds": 1502.0926673688452,
+        "reference_seconds": 1502.0926673688452,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8831790904,
+        "target_node_id": 6324123119,
+        "base_seconds": 125.14653363567835,
+        "reference_seconds": 125.14653363567835,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8340635479,
+        "target_node_id": 8830909379,
+        "base_seconds": 846.5713416169408,
+        "reference_seconds": 846.5713416169408,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12606553489,
+        "target_node_id": 14236202083,
+        "base_seconds": 1387.2637835138787,
+        "reference_seconds": 1387.2637835138787,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8332947618,
+        "target_node_id": 8344387646,
+        "base_seconds": 112.71742583287286,
+        "reference_seconds": 112.71742583287286,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716302691,
+        "target_node_id": 14279663430,
+        "base_seconds": 1702.9608798922936,
+        "reference_seconds": 1702.9608798922936,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5709919842,
+        "target_node_id": 4538404996,
+        "base_seconds": 545.1750197850278,
+        "reference_seconds": 545.1750197850278,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6621426599,
+        "target_node_id": 14257879788,
+        "base_seconds": 1580.3864897460503,
+        "reference_seconds": 1580.3864897460503,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14283007546,
+        "target_node_id": 1893247916,
+        "base_seconds": 943.1092531473034,
+        "reference_seconds": 943.1092531473034,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5707355789,
+        "target_node_id": 11556414965,
+        "base_seconds": 1973.80583190743,
+        "reference_seconds": 1973.80583190743,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8337446239,
+        "target_node_id": 5716461664,
+        "base_seconds": 2141.350968339554,
+        "reference_seconds": 2141.350968339554,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716576502,
+        "target_node_id": 2297812772,
+        "base_seconds": 1433.4364173850026,
+        "reference_seconds": 1433.4364173850026,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14311270200,
+        "target_node_id": 5686425957,
+        "base_seconds": 2624.0221524230574,
+        "reference_seconds": 2624.0221524230574,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8337440532,
+        "target_node_id": 13161330155,
+        "base_seconds": 1309.8445159652242,
+        "reference_seconds": 1309.8445159652242,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5719180395,
+        "target_node_id": 5707277257,
+        "base_seconds": 2435.4650886211307,
+        "reference_seconds": 2435.4650886211307,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13176982722,
+        "target_node_id": 12098156763,
+        "base_seconds": 1149.7753573901928,
+        "reference_seconds": 1149.7753573901928,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8337087875,
+        "target_node_id": 12011656242,
+        "base_seconds": 906.244620007121,
+        "reference_seconds": 906.244620007121,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 4074799409,
+        "target_node_id": 5710030989,
+        "base_seconds": 1154.778266810611,
+        "reference_seconds": 1154.778266810611,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710600481,
+        "target_node_id": 10182081307,
+        "base_seconds": 774.8897243728486,
+        "reference_seconds": 774.8897243728486,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 2701184898,
+        "target_node_id": 5710295019,
+        "base_seconds": 117.16763592572676,
+        "reference_seconds": 117.16763592572676,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5502395823,
+        "target_node_id": 480670269,
+        "base_seconds": 1463.7781710415693,
+        "reference_seconds": 1463.7781710415693,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5689925202,
+        "target_node_id": 5473286257,
+        "base_seconds": 2623.0409347205446,
+        "reference_seconds": 2623.0409347205446,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 4538405023,
+        "target_node_id": 12121871598,
+        "base_seconds": 2224.0005490839317,
+        "reference_seconds": 2224.0005490839317,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710185576,
+        "target_node_id": 1696156953,
+        "base_seconds": 1813.7541047310772,
+        "reference_seconds": 1813.7541047310772,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13647869372,
+        "target_node_id": 1745050360,
+        "base_seconds": 1255.0510240108326,
+        "reference_seconds": 1255.0510240108326,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5719480397,
+        "target_node_id": 5710304864,
+        "base_seconds": 2106.7409245643435,
+        "reference_seconds": 2106.7409245643435,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8990356338,
+        "target_node_id": 3398023505,
+        "base_seconds": 956.3415405152233,
+        "reference_seconds": 956.3415405152233,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5609423611,
+        "target_node_id": 2516235846,
+        "base_seconds": 1367.0406913982183,
+        "reference_seconds": 1367.0406913982183,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 282909415,
+        "target_node_id": 8823966274,
+        "base_seconds": 2971.825639301092,
+        "reference_seconds": 2971.825639301092,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10196625165,
+        "target_node_id": 4931817118,
+        "base_seconds": 1905.1733471078278,
+        "reference_seconds": 1905.1733471078278,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11991198746,
+        "target_node_id": 13866676108,
+        "base_seconds": 2031.5819958079405,
+        "reference_seconds": 2031.5819958079405,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8342777158,
+        "target_node_id": 5719266603,
+        "base_seconds": 262.4252663490828,
+        "reference_seconds": 262.4252663490828,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13795319085,
+        "target_node_id": 611555484,
+        "base_seconds": 2167.174351245014,
+        "reference_seconds": 2167.174351245014,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14213423751,
+        "target_node_id": 5721500477,
+        "base_seconds": 1475.4686027692007,
+        "reference_seconds": 1475.4686027692007,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 9593675856,
+        "target_node_id": 3229069511,
+        "base_seconds": 923.9011369248177,
+        "reference_seconds": 923.9011369248177,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14030490766,
+        "target_node_id": 6620589982,
+        "base_seconds": 546.6083072625747,
+        "reference_seconds": 546.6083072625747,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8932944363,
+        "target_node_id": 8807115887,
+        "base_seconds": 1267.9786404013478,
+        "reference_seconds": 1267.9786404013478,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5724712058,
+        "target_node_id": 5684445564,
+        "base_seconds": 1081.5095157760431,
+        "reference_seconds": 1081.5095157760431,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6178501306,
+        "target_node_id": 14213970726,
+        "base_seconds": 2208.224963032882,
+        "reference_seconds": 2208.224963032882,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 9948778086,
+        "target_node_id": 5710117985,
+        "base_seconds": 2439.3237062562584,
+        "reference_seconds": 2439.3237062562584,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716408013,
+        "target_node_id": 13848978349,
+        "base_seconds": 1621.2514057437631,
+        "reference_seconds": 1621.2514057437631,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 312952938,
+        "target_node_id": 8820278099,
+        "base_seconds": 2344.8785488246185,
+        "reference_seconds": 2344.8785488246185,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10197308918,
+        "target_node_id": 13816828837,
+        "base_seconds": 501.41668031944755,
+        "reference_seconds": 501.41668031944755,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 7840328078,
+        "target_node_id": 3826703900,
+        "base_seconds": 2252.205524770595,
+        "reference_seconds": 2252.205524770595,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8333898762,
+        "target_node_id": 3419753792,
+        "base_seconds": 1332.3169416638566,
+        "reference_seconds": 1332.3169416638566,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11108159097,
+        "target_node_id": 11361194884,
+        "base_seconds": 1203.8635858512419,
+        "reference_seconds": 1203.8635858512419,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5819726292,
+        "target_node_id": 5721820372,
+        "base_seconds": 2123.7942639265166,
+        "reference_seconds": 2123.7942639265166,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 110390929,
+        "target_node_id": 8340729486,
+        "base_seconds": 2534.6227638048804,
+        "reference_seconds": 2534.6227638048804,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716538192,
+        "target_node_id": 6178501141,
+        "base_seconds": 1682.6856827721192,
+        "reference_seconds": 1682.6856827721192,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710645937,
+        "target_node_id": 5716576502,
+        "base_seconds": 56.1614305607672,
+        "reference_seconds": 56.1614305607672,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 2410528119,
+        "target_node_id": 14320702213,
+        "base_seconds": 1070.625667318085,
+        "reference_seconds": 1070.625667318085,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8831790838,
+        "target_node_id": 11113273685,
+        "base_seconds": 2208.8739106372923,
+        "reference_seconds": 2208.8739106372923,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8336667685,
+        "target_node_id": 5707277305,
+        "base_seconds": 1141.3512698597817,
+        "reference_seconds": 1141.3512698597817,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11113273699,
+        "target_node_id": 10308025413,
+        "base_seconds": 275.57332905850285,
+        "reference_seconds": 275.57332905850285,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14179969781,
+        "target_node_id": 1919750985,
+        "base_seconds": 384.14058908074617,
+        "reference_seconds": 384.14058908074617,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12169661103,
+        "target_node_id": 12091660361,
+        "base_seconds": 2025.9183094866676,
+        "reference_seconds": 2025.9183094866676,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5719067808,
+        "target_node_id": 10810968710,
+        "base_seconds": 849.663512456284,
+        "reference_seconds": 849.663512456284,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11014102421,
+        "target_node_id": 12014666440,
+        "base_seconds": 2333.724634203389,
+        "reference_seconds": 2333.724634203389,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11215723798,
+        "target_node_id": 3779242614,
+        "base_seconds": 1579.980620232048,
+        "reference_seconds": 1579.980620232048,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14161773512,
+        "target_node_id": 12175952716,
+        "base_seconds": 2398.080348960044,
+        "reference_seconds": 2398.080348960044,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 480670267,
+        "target_node_id": 8341864443,
+        "base_seconds": 1485.5636478767874,
+        "reference_seconds": 1485.5636478767874,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12011656224,
+        "target_node_id": 10076263974,
+        "base_seconds": 2250.074569319313,
+        "reference_seconds": 2250.074569319313,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11230714639,
+        "target_node_id": 14179969781,
+        "base_seconds": 1686.7760771537314,
+        "reference_seconds": 1686.7760771537314,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12014666438,
+        "target_node_id": 3398023505,
+        "base_seconds": 2016.61959803452,
+        "reference_seconds": 2016.61959803452,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 1221938297,
+        "target_node_id": 5717068940,
+        "base_seconds": 944.3210963396476,
+        "reference_seconds": 944.3210963396476,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716536180,
+        "target_node_id": 8823992485,
+        "base_seconds": 3071.940577936481,
+        "reference_seconds": 3071.940577936481,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6620850842,
+        "target_node_id": 4877200893,
+        "base_seconds": 2349.2489044907834,
+        "reference_seconds": 2349.2489044907834,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 14172113830,
+        "target_node_id": 12169192490,
+        "base_seconds": 2684.099846845177,
+        "reference_seconds": 2684.099846845177,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 8276821697,
+        "target_node_id": 14121707309,
+        "base_seconds": 1252.250371278564,
+        "reference_seconds": 1252.250371278564,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10605713564,
+        "target_node_id": 8305754195,
+        "base_seconds": 1249.1199560125922,
+        "reference_seconds": 1249.1199560125922,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13795319092,
+        "target_node_id": 8344735709,
+        "base_seconds": 1080.4607832241272,
+        "reference_seconds": 1080.4607832241272,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5710538383,
+        "target_node_id": 10225965945,
+        "base_seconds": 760.1348689648026,
+        "reference_seconds": 760.1348689648026,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11871925317,
+        "target_node_id": 12009205318,
+        "base_seconds": 2222.9266685913108,
+        "reference_seconds": 2222.9266685913108,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13700678156,
+        "target_node_id": 1221938272,
+        "base_seconds": 1306.8475018092906,
+        "reference_seconds": 1306.8475018092906,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 13254634128,
+        "target_node_id": 7171318992,
+        "base_seconds": 1233.3249511689087,
+        "reference_seconds": 1233.3249511689087,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 9375002036,
+        "target_node_id": 12992402795,
+        "base_seconds": 2026.8886853014512,
+        "reference_seconds": 2026.8886853014512,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5716302654,
+        "target_node_id": 10166742722,
+        "base_seconds": 539.5326505118925,
+        "reference_seconds": 539.5326505118925,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10806528795,
+        "target_node_id": 2099141871,
+        "base_seconds": 1649.4959512024918,
+        "reference_seconds": 1649.4959512024918,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 6185888833,
+        "target_node_id": 13891671067,
+        "base_seconds": 2376.0802293959227,
+        "reference_seconds": 2376.0802293959227,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 10577084621,
+        "target_node_id": 6178450802,
+        "base_seconds": 1422.758630929266,
+        "reference_seconds": 1422.758630929266,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 5707356938,
+        "target_node_id": 12169454531,
+        "base_seconds": 164.8001503815736,
+        "reference_seconds": 164.8001503815736,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 11991301970,
+        "target_node_id": 443393347,
+        "base_seconds": 1342.3873885517414,
+        "reference_seconds": 1342.3873885517414,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12171403044,
+        "target_node_id": 8292738048,
+        "base_seconds": 1920.0865586396037,
+        "reference_seconds": 1920.0865586396037,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 84841622,
+        "target_node_id": 8266176341,
+        "base_seconds": 584.2894930016929,
+        "reference_seconds": 584.2894930016929,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12606538113,
+        "target_node_id": 11108159113,
+        "base_seconds": 1522.8043428755782,
+        "reference_seconds": 1522.8043428755782,
+        "relative_error": 0.0,
+        "passed": true
+      },
+      {
+        "source_node_id": 12171147791,
+        "target_node_id": 13795319089,
+        "base_seconds": 2115.549116423117,
+        "reference_seconds": 2115.549116423117,
+        "relative_error": 0.0,
+        "passed": true
+      }
+    ]
+  },
+  "scc_review": {
+    "source_metadata_sha256": "155939274cd8d80bcee551546d70b9fb0e626836d69486328d39df69771859da",
+    "svg_sha256": "dfdf7091a825572003fb70d4094d500acbe4decac106138ae85de0194ad5793a",
+    "implementation_sha256": "077bb0fd6f11c4f6a0fc4a1ce1a0ef5f59f6b6da58143e520aef155ecb6ccccf",
+    "note": "Geometric distance to retained roads; edge midpoints are samples, not full coverage",
+    "distance_to_retained_road_meters": {
+      "node": {
+        "sample_count": 1797,
+        "over_150_meters": 404,
+        "p50": 59.78316473409199,
+        "max": 599.1941619126297
+      },
+      "edge_midpoint": {
+        "sample_count": 2934,
+        "over_150_meters": 774,
+        "p50": 68.19896301865052,
+        "max": 591.5422163866413
+      }
+    }
+  },
+  "verification": {
+    "pytest": {
+      "passed": 306,
+      "skipped": 0,
+      "warnings": 356,
+      "command": "backend/.venv/bin/python -m pytest backend/tests -q --disable-warnings"
+    },
+    "ruff": "passed",
+    "git_diff_check": "passed"
+  },
+  "limitations": [
+    "Some AOI locations exceed the 150 m snap radius from retained SCC roads",
+    "Static car-v1 speeds are uncalibrated",
+    "TC-16, meeting optimization and runtime integration belong to later milestones",
+    "Frontend lint, typecheck and build not run: no frontend changes"
+  ]
+}

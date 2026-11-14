@@ -108,8 +108,8 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 - [x] Viết validation GeoJSON, kiểm tra biên bằng `covers`, buffer EPSG:32648, CLI xuất geometry/metadata và các test offline.
 - [x] Người phát triển chạy Ruff, pytest và CLI: Ruff đạt, 51 test đạt (25 AOI + 26 nền tảng), CLI xuất đủ AOI/routing area/metadata. Đã đọc metadata đầu ra: CRS đo EPSG:32648, geometry EPSG:4326, buffer 3.000 m, boundary `covers`; chưa rà soát bản đồ trực quan hoặc ranh giới toàn nội đô.
 
-- [ ] Tạo polygon AOI hợp lệ; rà soát ranh giới theo phạm vi nội đô đã chọn. Dùng vùng nhỏ để thử trước, dùng AOI đầy đủ khi nghiệm thu.
-- [ ] Quy định điểm nằm trên biên AOI được chấp nhận; dùng cùng quy tắc ở backend và frontend.
+- [x] Tạo polygon AOI hợp lệ; rà soát ranh giới theo phạm vi nội đô đã chọn. Dùng vùng nhỏ để thử trước, dùng AOI đầy đủ khi nghiệm thu.
+- [x] Quy định điểm nằm trên biên AOI được chấp nhận; dùng cùng quy tắc ở backend và frontend.
 - [x] Tạo `ROUTING_AREA` bằng buffer trên EPSG:32648 cho AOI thử nghiệm. Artifact đã được CLI xuất với buffer 3.000 m; diện tích AOI khoảng 4,60 km², routing area khoảng 58,62 km² theo metadata. Cần sinh lại khi thay AOI đầy đủ.
 **Tiến độ bước tải OSM:**
 
@@ -141,15 +141,15 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 - [x] Lưu ánh xạ node ID ↔ chỉ số mảng và cung CSR ↔ cạnh/hình học gốc. `mappings.npz` lưu node ID theo chỉ số CSR, toàn bộ `(u,v,key)` và `arc_edge_indices` theo offset CSR. Kiểm thử predecessor khôi phục đúng cạnh và giữ cờ ứng viên.
 - [x] Xuất đồ thị tham chiếu, CSR `.npz`, geometry, AOI và metadata có cùng phiên bản. CLI `scripts.prepare_graph_csr` đã tạo `backend/data/csr/hanoi-pilot-car-v1-csr-v1/`, 20.221 node/35.556 cung. Đối chiếu 20 nguồn × 20.221 node với NetworkX, seed 20261111, sai số lớn nhất 0 giây. Đã xác minh độc lập mọi ánh xạ cung, geometry cạnh, checksum và graph nguồn. Ruff và 276 test backend đạt.
 - [x] Chuẩn bị geometry để dựng STRtree khi backend khởi động. `geometry.npz` lưu tọa độ EPSG:32648 và offsets cho toàn bộ cạnh theo thứ tự `edge_ids`, gồm cả cạnh song song. Đã thử dựng STRtree từ dữ liệu xuất. Tích hợp runtime thuộc các mốc sau.
-- [ ] Tạo báo cáo validation: P50/P99/max thời gian cạnh, số cạnh dùng tốc độ mặc định, SCC, kích thước đồ thị và kiểm tra tuyến mẫu với NetworkX.
-- [ ] Ghi đủ metadata mục 10.4 của đặc tả, gồm `graph_version` và `weight_profile_version`.
+- [x] Tạo báo cáo validation: P50/P99/max thời gian cạnh, số cạnh dùng tốc độ mặc định, SCC, kích thước đồ thị và kiểm tra tuyến mẫu với NetworkX.
+- [x] Ghi đủ metadata mục 10.4 của đặc tả, gồm `graph_version` và `weight_profile_version`.
 
 **Cổng nghiệm thu M1**
 
-- [ ] Đồ thị nạp lại được từ artifact mà không tải OSM.
-- [ ] Không có cạnh sai đơn vị, trọng số không hợp lệ hoặc ánh xạ CSR thiếu hình học.
+- [x] Đồ thị nạp lại được từ artifact mà không tải OSM.
+- [x] Không có cạnh sai đơn vị, trọng số không hợp lệ hoặc ánh xạ CSR thiếu hình học.
 - [x] Các đoạn sau chia đáp ứng ngưỡng 60 giây. Đã xác minh trên artifact thử nghiệm: max 56,177981 giây; chưa thay thế nghiệm thu trên AOI toàn nội đô.
-- [ ] Có báo cáo rà soát phạm vi AOI và vùng bị loại bởi SCC.
+- [x] Có báo cáo rà soát phạm vi AOI và vùng bị loại bởi SCC.
 
 ### M2 — Prototype thuật toán tham chiếu
 
@@ -373,7 +373,7 @@ Response lỗi có `error_code`, `message`, `request_id`. Khi không biết chí
 
 ### Validation trên dữ liệu thật
 
-- [ ] Chạy TC-15 với cùng nguồn OSM và speed profile; ghi rõ cách lấy mẫu, seed và cách tính sai lệch.
+- [x] Chạy TC-15 với cùng nguồn OSM và speed profile; ghi rõ cách lấy mẫu, seed và cách tính sai lệch.
 - [ ] Nếu buffer không đạt, tăng buffer, dựng lại và kiểm tra lại; không giảm tiêu chuẩn.
 - [ ] Chạy TC-16 trên AOI nghiệm thu, gồm nguồn gần nhau, xa nhau và sát biên.
 - [ ] Rà soát thủ công các tuyến gần cầu vượt, nút giao và đường một chiều.
