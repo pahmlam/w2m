@@ -21,3 +21,4 @@ backend/data/*
 outputs/
 /frontend/next-env.d.ts
 private/
+docs/

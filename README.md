@@ -3,20 +3,11 @@
 Ứng dụng tìm điểm gặp cho 4 người trên mạng đường có hướng tại Hà Nội, dựa trên
 thời gian di chuyển và mức ưu tiên công bằng của cả nhóm.
 
-**Hiện trạng ngày 2026-11-14:** M0 và M1 hoàn thành local trên AOI kỹ thuật Vành đai 3
-đã được chủ dự án duyệt. Bundle 3 km có 149.213 node, 290.952 cạnh, 96.410 ứng viên;
-TC-15 đạt 200/200 cặp khi đối chiếu buffer 6 km. Xem
-[báo cáo nghiệm thu M1](docs/reports/2026-11-14-m1-acceptance.md).
+**Hiện trạng ngày 2026-11-14:** M0 và M1 hoàn thành local trên AOI kỹ thuật Vành đai 3. Bundle 3 km có 149.213 node, 290.952 cạnh, 96.410 ứng viên;
+TC-15 đạt 200/200 cặp khi đối chiếu buffer 6 km.
 API còn chờ tích hợp graph. Frontend là trang khởi tạo,
 chưa gọi backend hoặc hiển thị bản đồ.
 Thuật toán tìm điểm gặp, cache/rerank, Docker và nghiệm thu MVP chưa hoàn thành.
-
-- [SPEC v0.2.0](docs/spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)
-- [Kế hoạch MVP và checklist](docs/plans/W2M-MVP-Plan.md)
-- [Bổ sung hợp đồng M0](docs/spec/W2M-M0-Contract-Addendum.md)
-- [Hướng dẫn dữ liệu và tái tạo artifact](backend/data/README.md)
-- [Dựng AOI Vành đai 3, pipeline offline và TC-15](backend/data/README.md#aoi-vành-đai-3-và-nghiệm-thu-m1)
-- [Development journals](docs/journals/)
 
 ## Yêu cầu và cài đặt
 
@@ -201,22 +192,6 @@ PYTHONPATH=backend uv run --project backend --locked --extra data python -m scri
   --output-dir backend/data/validated/hanoi-pilot-car-v1-csr-v1
 ```
 
-Các CLI graph/snapshot từ chối ghi đè thư mục đích: chọn đích mới khi tái tạo và
-cập nhật đường dẫn đầu vào của bước sau. Xem [hướng dẫn dữ liệu](backend/data/README.md)
-cho quy tắc retry, checksum, cấu trúc metadata và hợp đồng mapping cạnh ngược.
-
-SCC xuất `removed_in_aoi.geojson` gồm 29 node và 37 đoạn cạnh bị loại trong AOI;
-chưa rà soát bản đồ trực quan. Mapping cạnh ngược dùng osmid, oneway, thông tin
-layer/level/bridge/tunnel và hình học đảo chiều trong 0,01 m; không đổi trọng số
-mỗi chiều hoặc tự thêm chiều đi.
-
-Bước chia cạnh dùng chung vị trí chia cho hai chiều đã ghép, giữ tổng chiều dài
-và thời gian từng cạnh gốc; xuất lineage, mapping mới và phân loại inside/boundary/outside.
-Node mới có ID tất định, không nối các đường chỉ giao hình học. Graph nạp lại vẫn
-liên thông mạnh. Bước gắn cờ nhận mọi node trong hoặc trên biên AOI, kể cả node
-do chia cạnh sinh ra. Tùy chọn `--exclude-node-ids` nhận một tệp JSON chứa mảng
-ID node số nguyên. Node bị loại khỏi tập ứng viên vẫn dùng được để định tuyến.
-
 ## Cấu trúc mã nguồn
 
 | Đường dẫn | Trách nhiệm |
@@ -235,36 +210,3 @@ ID node số nguyên. Node bị loại khỏi tập ứng viên vẫn dùng đư
 | `backend/tests/` | Test nền tảng, dữ liệu và CLI offline |
 | `frontend/app/` | Layout, trang chủ và CSS |
 | `frontend/types/meeting.ts` | TypeScript contracts tương ứng models backend |
-
-## Cấu hình và giới hạn hiện tại
-
-Backend đọc `.env` gốc với prefix `W2M_`; xem [.env.example](.env.example). Cấu hình
-bao gồm đường dẫn dữ liệu, buffer, snap radius, access speed, cutoff và cache.
-Các tham số snap/cache đã được khai báo nhưng xử lý runtime chưa triển khai.
-
-Frontend đọc `frontend/.env.local`; xem [mẫu cấu hình](frontend/.env.example).
-`NEXT_PUBLIC_API_BASE_URL` và `NEXT_PUBLIC_MAP_STYLE_URL` dành cho bước tích hợp
-sau. Mọi biến `NEXT_PUBLIC_*` đều công khai; không đặt secret vào đó. MapLibre đã
-có dependency nhưng chưa được dùng để hiển thị bản đồ, chưa chọn tile provider.
-
-- Bước kế tiếp là M2: snapping, overlay, Dijkstra, OWA và dựng tuyến tham chiếu
-  bằng NetworkX; nghiệm thu TC-01–TC-12.
-- Một số vùng trong AOI xa đường thuộc SCC được giữ hơn 150 m; đầu vào tại đó
-  có thể trả `SNAP_FAILED`. Xem báo cáo M1 và bản đồ vùng bị loại.
-- Graph sau chia đạt ngưỡng 60 giây; artifact SCC trước chia vẫn được giữ để truy vết.
-- `car-v1` là tốc độ giả định, chưa hiệu chỉnh. Mô hình chưa xét cấm rẽ, chi phí rẽ
-  hoặc giao thông thời gian thực; kết quả sau này là thời gian ước lượng.
-- Chưa có snapping/Dijkstra/OWA phục vụ request, cache/rerank hoặc Docker runtime.
-- Không log request body chứa tọa độ; không lưu tọa độ người dùng vào artifact.
-
-Dữ liệu đường từ © OpenStreetMap contributors, ODbL-1.0; attribution và license
-được lưu trong artifact. Cần rà soát điều kiện phân phối dữ liệu dẫn xuất và
-điều khoản tile provider trước khi triển khai công khai.
-
-Frontend hiện giữ override `@typescript-eslint/typescript-estree` → minimatch
-`^11.0.1` từ lần xử lý audit M0; cần kiểm tra tương thích lint khi đổi dependency
-và bỏ override khi dependency upstream phù hợp. Kết quả audit M0 là bằng chứng
-lịch sử, chưa phải xác nhận bảo mật tại thời điểm cài đặt mới.
-
-
-
