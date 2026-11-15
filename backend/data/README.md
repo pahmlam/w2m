@@ -563,3 +563,36 @@ snap dùng được cho hai hướng; loader/index từ chối dữ liệu khôn
 Dung sai đầu mút `1e-7 m` chỉ xử lý sai số chiếu số thực, không nới bán kính
 150 m. Bước này chưa tạo overlay, chạy Dijkstra, lượng tử hoặc nối API;
 readiness và endpoint nghiệp vụ tiếp tục theo trạng thái khởi tạo hiện tại.
+
+## Overlay và Dijkstra tham chiếu — M2
+
+Sau khi tạo `snapper` và `request` như ví dụ trên:
+
+```python
+from app.services.shortest_path import route_origins
+
+routing = route_origins(snapper, request)
+for source in routing.sources:
+    distances = source.paths.distances_seconds  # δ, chưa gồm access
+    predecessors = source.paths.predecessors    # node -> (node trước, edge key)
+    network_cutoff = source.network_cutoff_seconds
+```
+
+Mỗi lần gọi sao chép graph NetworkX riêng, theo thứ tự ID cố định. Đây là bản
+tham chiếu offline, có chi phí bộ nhớ sao chép; đường production CSR thuộc M3.
+Graph chung không bị sửa. Kết quả giữ overlay và graph/profile version để bước
+scorer, dựng tuyến dùng đúng dữ liệu của lần tính đó.
+
+Nguồn giữa cạnh dùng ID chuỗi `origin:<id>`, chỉ có cạnh ra tới đầu mút hợp lệ.
+Geometry cạnh tạm là phần polyline đúng chiều, có `original_edge_id` để truy vết.
+Không nối các nguồn tạm hoặc loại bỏ cạnh gốc. Nguồn đầu mút dùng node hiện hữu.
+
+NetworkX Dijkstra chạy riêng từng nguồn với cutoff gốc `max_travel_seconds -
+access_seconds`. Bảng khoảng cách chỉ chứa node bền vững, không chứa nguồn tạm.
+Cutoff âm trả rỗng; cutoff 0 chỉ giữ nguồn hiện hữu. Predecessor gốc không có
+phần tử; predecessor đầu tiên của nguồn giữa đường có thể trỏ tới ID chuỗi.
+Cạnh song song được chọn theo `(travel_time, edge_key)`; predecessor cùng thời
+gian lấy phần tử đầu tiên của NetworkX trên graph có thứ tự chèn cố định.
+
+Thời gian access vẫn nằm trong `source.snap.access_seconds`; chưa lượng tử,
+chấm OWA, cache hoặc tích hợp HTTP. Không log hay lưu tọa độ từ request.
