@@ -596,3 +596,36 @@ gian lấy phần tử đầu tiên của NetworkX trên graph có thứ tự ch
 
 Thời gian access vẫn nằm trong `source.snap.access_seconds`; chưa lượng tử,
 chấm OWA, cache hoặc tích hợp HTTP. Không log hay lưu tọa độ từ request.
+
+## Lọc ứng viên và OWA tham chiếu — M2
+
+Sau khi có `routing` và `request` từ ví dụ định tuyến:
+
+```python
+from app.services.meeting_optimizer import rank_candidates
+
+ranking = rank_candidates(
+    routing,
+    phi=request.optimization.phi,
+    max_travel_seconds=request.optimization.max_travel_seconds,
+)
+# ranking.origin_ids xác định thứ tự phần tử trong các vector thời gian.
+# ranking.candidates chứa toàn bộ ứng viên đã sắp, chưa lọc spacing/top_k.
+```
+
+Chỉ xét node bền vững có hai cờ `in_aoi`/`is_candidate` hợp lệ của M1, kể cả
+node ID âm do chia cạnh. Thời gian tổng gốc là access cộng network, được kiểm
+tra hữu hạn và cutoff trước khi làm tròn. Không gọi lại Dijkstra; tăng giới
+hạn vượt phạm vi bảng đã tính trả `ValueError`, không trả bảng xếp hạng thiếu.
+Có thể đổi phi hoặc giảm giới hạn trên cùng routing. Không có điểm thì trả
+`ranking.candidates == ()`, không đoán ngưỡng thời gian tối thiểu.
+
+`objective.owa_score(times, phi)` dùng cho toán học chưa lượng tử, tổng quát K
+nguồn. Các ứng viên dùng `q(x) = round(10*x)/10`, half-even: lượng tử từng thời
+gian tổng, tính OWA rồi lượng tử score. Max/min, chênh lệch và trung bình lấy từ
+vector đã lượng tử. Weights giữ đầy đủ độ chính xác.
+
+Khóa sắp xếp là `(score, max_time, avg_time, sorted_raw_times_desc, node_id)`.
+Vector gốc bảo toàn Pareto khi các số hiển thị hòa; không dùng riêng node ID để
+phá hòa lượng tử. Chưa gán rank API, lọc khoảng cách, dựng tuyến hoặc nối HTTP.
+Không log hoặc lưu routing chứa tọa độ của người dùng.

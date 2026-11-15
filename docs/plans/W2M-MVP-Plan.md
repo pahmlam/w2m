@@ -2,7 +2,7 @@
 
 **Căn cứ:** [Software & Technical Specification v0.2.0](../spec/W2M%20—%20Software%20%26%20Technical%20Specification%20v0.2.0.md)  
 **Ngày lập:** 2026-11-06  
-**Trạng thái:** M0 hoàn thành local; remote CI chưa xác minh. Pipeline offline M1 trên AOI thử nghiệm đã xuất CSR và các ánh xạ có phiên bản, có 2.504 ứng viên. Ruff và 276 test backend đạt (58 cảnh báo deprecation). Còn báo cáo validation/metadata đầy đủ, rà soát AOI toàn nội đô và tích hợp runtime. M1 chưa hoàn thành, M2–M6 chưa thực hiện.
+
 
 ## 1. Mục tiêu và các quyết định đã chốt
 
@@ -163,10 +163,10 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 - [x] Xử lý đúng cạnh hai chiều có thời gian hai chiều khác nhau và nhiều nguồn cùng nằm trên một cạnh.
 - [x] Chạy Dijkstra riêng cho từng nguồn với cutoff `T_LIMIT − access_raw`.
 - [x] Lưu khoảng cách và predecessor có đủ edge key; giữ nguyên đồ thị dùng chung.
-- [ ] Lọc ứng viên theo thời gian gốc trước khi lượng tử, tránh nhận điểm thực tế vượt cutoff.
-- [ ] Cài đặt trọng số OWA và scorer tổng quát cho K nguồn; trọng số được tính đủ độ chính xác.
-- [ ] Lượng tử thời gian và score theo bước 0,1 giây; dùng quy tắc round thống nhất.
-- [ ] Xếp hạng theo khóa đã bổ sung; kiểm tra tính đối xứng khi đổi nhãn A–D.
+- [x] Lọc ứng viên theo thời gian gốc trước khi lượng tử, tránh nhận điểm thực tế vượt cutoff.
+- [x] Cài đặt trọng số OWA và scorer tổng quát cho K nguồn; trọng số được tính đủ độ chính xác.
+- [x] Lượng tử thời gian và score theo bước 0,1 giây; dùng quy tắc round thống nhất.
+- [x] Xếp hạng theo khóa đã bổ sung; kiểm tra tính đối xứng khi đổi nhãn A–D.
 - [ ] Lọc đa dạng tham lam trên EPSG:32648; không nới khoảng cách khi thiếu kết quả.
 - [ ] Dựng tuyến từ predecessor của chính lần Dijkstra đã xếp hạng, gồm cả phần cạnh từ nguồn tạm.
 - [ ] Ghép polyline từ hình học cạnh thực; xử lý tuyến dài bằng 0 bằng LineString có hai tọa độ trùng nhau.
