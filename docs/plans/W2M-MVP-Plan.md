@@ -155,10 +155,10 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 
 **Đầu ra:** pipeline đúng bằng Python/NetworkX, làm chuẩn cho bản tối ưu.
 
-- [ ] Xác thực đúng 4 nguồn, ID duy nhất, tọa độ hữu hạn và nằm trong AOI; cho phép vị trí trùng nhau.
-- [ ] Chiếu tọa độ nhất quán, tránh đảo latitude/longitude.
-- [ ] Snap bằng STRtree trong bán kính 150 m; xử lý hòa bằng ID tất định.
-- [ ] Ghi điểm chiếu, cạnh được chọn, `theta`, khoảng cách snap và thời gian tiếp cận.
+- [x] Xác thực đúng 4 nguồn, ID duy nhất, tọa độ hữu hạn và nằm trong AOI; cho phép vị trí trùng nhau.
+- [x] Chiếu tọa độ nhất quán, tránh đảo latitude/longitude.
+- [x] Snap bằng STRtree trong bán kính 150 m; xử lý hòa bằng ID tất định.
+- [x] Ghi điểm chiếu, cạnh được chọn, `theta`, khoảng cách snap và thời gian tiếp cận.
 - [ ] Tạo overlay riêng cho request; nguồn tạm chỉ có cạnh ra đúng chiều. Khi snap vào đầu mút thì dùng node có sẵn.
 - [ ] Xử lý đúng cạnh hai chiều có thời gian hai chiều khác nhau và nhiều nguồn cùng nằm trên một cạnh.
 - [ ] Chạy Dijkstra riêng cho từng nguồn với cutoff `T_LIMIT − access_raw`.

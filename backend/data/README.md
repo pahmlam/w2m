@@ -527,3 +527,39 @@ phạm vi snap được. Bản SVG kèm thống kê của lần nghiệm thu loc
 `pending_acceptance` trong validation là trạng thái tại lúc xuất bundle;
 kết quả TC-15 và quyết định rà soát sau đó được lưu riêng, không sửa báo cáo cũ.
 TC-16, hiệu chỉnh tốc độ và tích hợp API/runtime thuộc các mốc tiếp theo.
+
+## Snapping tham chiếu — bước đầu M2
+
+Dùng extra `data` đã khóa, chạy Python từ thư mục gốc với `PYTHONPATH=backend`:
+
+```python
+from pathlib import Path
+from app.config.settings import Settings
+from app.models.requests import MeetingRequest
+from app.services.graph_loader import load_reference_graph
+from app.services.coordinate_snapper import CoordinateSnapper, SnapError
+
+reference = load_reference_graph(
+    Path("backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated")
+)
+snapper = CoordinateSnapper(reference, Settings())
+# payload là request hợp lệ theo hợp đồng M0; không log hoặc lưu tọa độ người dùng.
+request = MeetingRequest.model_validate(payload)
+try:
+    sources = snapper.snap_origins(request)
+except SnapError as exc:
+    error_code = exc.error_code  # OUT_OF_COVERAGE hoặc SNAP_FAILED
+```
+
+Tái sử dụng `snapper` để không nạp graph và dựng STRtree mỗi request. Loader kiểm
+tra checksum, metadata, SCC và mapping cạnh ngược; không tải OSM. `nx.freeze`
+khóa cấu trúc graph; code gọi vẫn phải giữ nguyên các dictionary thuộc tính.
+
+`SnapResult` giữ thời gian/khoảng cách gốc, `theta` theo chiều cạnh được chọn,
+ID cạnh ngược đã xác nhận và `source_node_id` tại đầu mút. Điểm giữa cạnh chưa có
+node tạm. Các cặp ngược phải trùng chuỗi tọa độ sau đảo chiều để cùng một điểm
+snap dùng được cho hai hướng; loader/index từ chối dữ liệu không đáp ứng.
+
+Dung sai đầu mút `1e-7 m` chỉ xử lý sai số chiếu số thực, không nới bán kính
+150 m. Bước này chưa tạo overlay, chạy Dijkstra, lượng tử hoặc nối API;
+readiness và endpoint nghiệp vụ tiếp tục theo trạng thái khởi tạo hiện tại.
