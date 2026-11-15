@@ -167,10 +167,10 @@ Thứ tự phụ thuộc chính: **M0 → M1 → M2 → M3 → M4 → M5 → M6 
 - [x] Cài đặt trọng số OWA và scorer tổng quát cho K nguồn; trọng số được tính đủ độ chính xác.
 - [x] Lượng tử thời gian và score theo bước 0,1 giây; dùng quy tắc round thống nhất.
 - [x] Xếp hạng theo khóa đã bổ sung; kiểm tra tính đối xứng khi đổi nhãn A–D.
-- [ ] Lọc đa dạng tham lam trên EPSG:32648; không nới khoảng cách khi thiếu kết quả.
-- [ ] Dựng tuyến từ predecessor của chính lần Dijkstra đã xếp hạng, gồm cả phần cạnh từ nguồn tạm.
-- [ ] Ghép polyline từ hình học cạnh thực; xử lý tuyến dài bằng 0 bằng LineString có hai tọa độ trùng nhau.
-- [ ] Tính khoảng cách mạng, kiểm tra tổng trọng số gốc và chuẩn hóa các trường thời gian API.
+- [x] Lọc đa dạng tham lam trên EPSG:32648; không nới khoảng cách khi thiếu kết quả.
+- [x] Dựng tuyến từ predecessor của chính lần Dijkstra đã xếp hạng, gồm cả phần cạnh từ nguồn tạm.
+- [x] Ghép polyline từ hình học cạnh thực; xử lý tuyến dài bằng 0 bằng LineString có hai tọa độ trùng nhau.
+- [x] Tính khoảng cách mạng, kiểm tra tổng trọng số gốc và chuẩn hóa các trường thời gian API.
 - [ ] Chạy TC-01 đến TC-12 và các kiểm thử bổ sung về lượng tử.
 
 **Cổng nghiệm thu M2 — Phase 1 hoàn thành**
