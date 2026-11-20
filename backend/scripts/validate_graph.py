@@ -19,6 +19,7 @@ from scipy.sparse.csgraph import dijkstra
 from shapely import Point, transform
 
 from app.services.area import METRIC_CRS, WGS84_CRS, load_aoi
+from app.services.csr_route_edges import csr_arc_offset
 from app.services.graph_csr import build_graph_csr
 from app.services.graph_split import BOUNDARY_TOLERANCE_METERS
 from app.services.graph_weights import apply_speed_profile, load_speed_profile
@@ -60,10 +61,7 @@ def validate_sample_routes(
                 previous = int(predecessors[current])
                 if previous < 0 or len(edges) >= len(graph):
                     raise ValueError("Invalid CSR predecessor chain")
-                start, end = csr.indptr[previous:previous + 2]
-                offset = start + int(np.searchsorted(csr.indices[start:end], current))
-                if offset >= end or csr.indices[offset] != current:
-                    raise ValueError("Predecessor has no corresponding CSR arc")
+                offset = csr_arc_offset(csr, previous, current)
                 edge = tuple(int(value) for value in mappings["edge_ids"][
                     mappings["arc_edge_indices"][offset]
                 ])

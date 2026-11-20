@@ -10,6 +10,7 @@ from test_csr_graph_loader import csr_bundle as csr_bundle
 
 from app.services.coordinate_snapper import SnapResult
 from app.services.csr_overlay import SourceFragment, build_csr_overlay
+from app.services.csr_route_edges import CSRRouteEdge, trace_csr_route_edges
 from app.services.csr_shortest_path import NO_PREDECESSOR, route_csr_origins
 from app.services.graph_loader import load_csr_graph
 
@@ -120,3 +121,49 @@ def test_predecessors_trace_persistent_and_temporary_arcs(csr_bundle: Path) -> N
 def test_routing_rejects_invalid_travel_cutoff(csr_bundle: Path, limit: float) -> None:
     with pytest.raises(ValueError, match="finite and non-negative"):
         route_csr_origins(load_csr_graph(csr_bundle), [_two_way_snap()], limit)
+
+
+def test_trace_keeps_original_parallel_edge_and_reverse_fraction(csr_bundle: Path) -> None:
+    graph = load_csr_graph(csr_bundle)
+    two_way = _two_way_snap()
+    parallel = replace(two_way, origin_id="B", edge_id=(-3, 7, 1), reverse_edge_id=None,
+                       theta=0.5, snapped_xy=(500010, 2300005))
+    endpoint = replace(two_way, origin_id="C", theta=0, source_node_id=-3,
+                       snapped_xy=(500000, 2300000))
+    routing = route_csr_origins(graph, [two_way, parallel, endpoint], 31)
+
+    assert trace_csr_route_edges(routing, "A", -3) == (CSRRouteEdge((7, -3, 0), 2, 0.75, 2.75),)
+    assert trace_csr_route_edges(routing, "B", -3) == (
+        CSRRouteEdge((-3, 7, 1), 1, 0.5, 10),
+        CSRRouteEdge((7, -3, 0), 2, 0, 11),
+    )
+    assert trace_csr_route_edges(routing, "C", 7) == (CSRRouteEdge((-3, 7, 0), 0, 0, 5),)
+    assert trace_csr_route_edges(routing, "C", -3) == ()
+
+
+def test_trace_rejects_unknown_and_unreachable_targets(csr_bundle: Path) -> None:
+    routing = route_csr_origins(load_csr_graph(csr_bundle), [_two_way_snap()], 12.75)
+    with pytest.raises(ValueError, match="Unknown route origin"):
+        trace_csr_route_edges(routing, "B", -3)
+    with pytest.raises(ValueError, match="Unknown route target"):
+        trace_csr_route_edges(routing, "A", 99)
+    with pytest.raises(ValueError, match="unreachable"):
+        trace_csr_route_edges(routing, "A", 7)
+
+
+@pytest.mark.parametrize(("parents", "error"), [
+    ([NO_PREDECESSOR, 2], "Broken or cyclic"),
+    ([1, 0], "Broken or cyclic"),
+    ([3, 2], "Broken or cyclic"),
+    ([0, 2], "no corresponding CSR arc"),
+    ([1, 2], "do not match the stored network duration"),
+])
+def test_trace_rejects_inconsistent_predecessor_chains(
+    csr_bundle: Path, parents: list[int], error: str,
+) -> None:
+    graph = load_csr_graph(csr_bundle)
+    routing = route_csr_origins(graph, [_two_way_snap(), _two_way_snap("B")], 31)
+    first, second = routing.sources
+    malformed = replace(first, predecessors=np.array(parents))
+    with pytest.raises(ValueError, match=error):
+        trace_csr_route_edges(replace(routing, sources=(malformed, second)), "A", -3)
