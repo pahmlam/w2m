@@ -1,14 +1,19 @@
 """Reconstruct selected reference routes without searching the graph again."""
 
+from __future__ import annotations
+
 from math import fsum, hypot, isfinite
+from typing import TYPE_CHECKING
 
 from pyproj import Transformer
 
 from app.models.responses import LineString, Route
 from app.services.area import METRIC_CRS, WGS84_CRS
 from app.services.coordinate_snapper import ENDPOINT_ROUNDOFF_METERS
-from app.services.request_overlay import NodeId, RequestOverlay
-from app.services.shortest_path import SourcePaths
+
+if TYPE_CHECKING:
+    from app.services.request_overlay import NodeId, RequestOverlay
+    from app.services.shortest_path import SourcePaths
 
 _TO_WGS84 = Transformer.from_crs(METRIC_CRS, WGS84_CRS, always_xy=True)
 

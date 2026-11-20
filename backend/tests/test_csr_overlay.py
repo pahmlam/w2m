@@ -13,6 +13,7 @@ from app.services.csr_overlay import SourceFragment, build_csr_overlay
 from app.services.csr_route_edges import CSRRouteEdge, trace_csr_route_edges
 from app.services.csr_shortest_path import NO_PREDECESSOR, route_csr_origins
 from app.services.graph_loader import load_csr_graph
+from app.services.meeting_optimizer import rank_candidates, select_candidates
 
 
 def _two_way_snap(origin_id: str = "A") -> SnapResult:
@@ -167,3 +168,44 @@ def test_trace_rejects_inconsistent_predecessor_chains(
     malformed = replace(first, predecessors=np.array(parents))
     with pytest.raises(ValueError, match=error):
         trace_csr_route_edges(replace(routing, sources=(malformed, second)), "A", -3)
+
+
+def test_csr_ranking_requires_candidate_flag_and_common_reachability(csr_bundle: Path) -> None:
+    graph = load_csr_graph(csr_bundle)
+    snaps = [_two_way_snap(origin_id) for origin_id in "ABCD"]
+    all_reach_both = route_csr_origins(graph, snaps, 31)
+    ranked = rank_candidates(all_reach_both, phi=0.5, max_travel_seconds=31)
+    assert [(candidate.node_id, candidate.score) for candidate in ranked.candidates] == [(7, 13.8)]
+
+    one_limited = route_csr_origins(graph, [*snaps[:3], replace(snaps[3], access_seconds=28)], 31)
+    assert rank_candidates(one_limited, phi=0.5, max_travel_seconds=31).candidates == ()
+
+
+def test_csr_reranking_filters_raw_cutoff_and_preserves_pareto_ties(
+    csr_bundle: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    graph = load_csr_graph(csr_bundle)
+    graph = replace(graph, _mappings={**graph.mappings, "is_candidate": np.array([True, True])})
+    snaps = [replace(_two_way_snap(origin_id), access_seconds=50) for origin_id in "ABCD"]
+    routing = route_csr_origins(graph, snaps, 301)
+    routing = replace(routing, sources=tuple(
+        replace(source, distances_seconds=np.array([250.04, 250.0]))
+        for source in routing.sources
+    ))
+    monkeypatch.setattr("app.services.csr_shortest_path.dijkstra",
+                        lambda *a, **k: pytest.fail("Rerouted"))
+    monkeypatch.setattr("app.services.meeting_optimizer.build_route",
+                        lambda *a, **k: pytest.fail("Built geometry"))
+
+    for phi in (0, 0.5, 1):
+        ranked = rank_candidates(routing, phi=phi, max_travel_seconds=301)
+        assert ranked.origin_ids == tuple("ABCD")
+        assert [(c.node_id, c.score) for c in ranked.candidates] == [(7, 300), (-3, 300)]
+        assert ranked.candidates[0].raw_times_seconds == (300,) * 4
+        assert select_candidates(ranked, top_k=5, min_spacing_meters=20) == ranked.candidates
+        assert select_candidates(ranked, top_k=5, min_spacing_meters=20.01) == ranked.candidates[:1]
+
+    reduced = rank_candidates(routing, phi=0.5, max_travel_seconds=300)
+    assert [c.node_id for c in reduced.candidates] == [7]
+    with pytest.raises(ValueError, match="coverage"):
+        rank_candidates(routing, phi=0.5, max_travel_seconds=302)
