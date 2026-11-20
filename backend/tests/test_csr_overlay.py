@@ -122,6 +122,25 @@ def test_predecessors_trace_persistent_and_temporary_arcs(csr_bundle: Path) -> N
     assert graph.csr.data.tolist() == [5, 11]
 
 
+def test_csr_searches_all_sources_using_only_the_time_cutoff(
+    csr_bundle: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    graph = load_csr_graph(csr_bundle)
+    snaps = [replace(_two_way_snap(label), access_seconds=i) for i, label in enumerate("ABCD")]
+    calls = []
+
+    def search(matrix, **options):
+        calls.append(options)
+        return dijkstra(matrix, **options)
+
+    monkeypatch.setattr("app.services.csr_shortest_path.dijkstra", search)
+    route_csr_origins(graph, snaps, 31)
+    assert calls == [
+        {"directed": True, "indices": 2 + i, "limit": 31 - i, "return_predecessors": True}
+        for i in range(4)
+    ]
+
+
 @pytest.mark.parametrize("limit", [-1, np.nan, np.inf, True])
 def test_routing_rejects_invalid_travel_cutoff(csr_bundle: Path, limit: float) -> None:
     with pytest.raises(ValueError, match="finite and non-negative"):

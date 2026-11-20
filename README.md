@@ -218,6 +218,19 @@ tên output mới cho mỗi lần chạy; CLI không ghi đè báo cáo cũ và 
 Đây là kiểm tra prototype; TC-01–TC-12 chạy trong pytest, còn HTTP, cache,
 CSR production và TC-13–TC-16 được nghiệm thu ở các mốc tương ứng.
 
+## Đối chiếu TC-16
+
+```bash
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.validate_tc16 \
+  --bundle-dir backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
+  --output backend/data/reports/tc16.json
+```
+
+CLI mặc định chạy 1.000 request tổng hợp theo seed cố định. Các ca gồm nguồn
+gần nhau, phân tán và sát biên AOI. CLI đối chiếu thứ tự điểm và ghi chênh lệch
+điểm số, số tuyến kiểm tra và ca sai khác đầu tiên nếu có. Dùng `--requests 6` để chạy
+smoke test cả ba nhóm. Mỗi lượt chạy cần một đường dẫn báo cáo mới.
+
 ## Cấu trúc mã nguồn
 
 | Đường dẫn | Trách nhiệm |
