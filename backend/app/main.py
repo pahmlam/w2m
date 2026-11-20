@@ -1,4 +1,9 @@
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from uuid import uuid4
+from xml.etree.ElementTree import ParseError
+from zipfile import BadZipFile
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -7,11 +12,28 @@ from fastapi.responses import JSONResponse
 
 from app.api.meeting import router, unavailable
 from app.config.settings import get_settings
+from app.models.responses import ErrorResponse
+from app.services.graph_loader import load_csr_graph
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="W2M API", version="0.2.0")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        app.state.csr_graph = None
+        try:
+            app.state.csr_graph = load_csr_graph(settings.graph_dir)
+        except (BadZipFile, EOFError, KeyError, OSError, ParseError, TypeError, ValueError) as exc:
+            logger.warning("CSR graph unavailable: %s", exc)
+        try:
+            yield
+        finally:
+            app.state.csr_graph = None
+
+    app = FastAPI(title="W2M API", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST"], allow_headers=["Content-Type"],
@@ -48,9 +70,11 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok", "service": "w2m", "version": "0.2.0"}
 
-    @app.get("/ready", status_code=503)
-    def ready(request: Request):
-        return unavailable(request)
+    @app.get("/ready", responses={503: {"model": ErrorResponse}})
+    def ready(request: Request) -> JSONResponse:
+        if getattr(request.app.state, "csr_graph", None) is None:
+            return unavailable(request)
+        return JSONResponse(content={"status": "ready"})
 
     app.include_router(router)
     return app

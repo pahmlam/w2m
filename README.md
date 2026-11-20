@@ -53,14 +53,15 @@ npm --prefix frontend run dev
 | Endpoint | Hành vi hiện tại |
 |---|---|
 | `GET /health` | 200 khi process chạy |
-| `GET /ready` | 503 `GRAPH_UNAVAILABLE` |
+| `GET /ready` | 200 khi nạp được CSR, 503 `GRAPH_UNAVAILABLE` nếu bundle thiếu hoặc không hợp lệ |
 | `GET /api/v1/map/config` | 503 `GRAPH_UNAVAILABLE` |
 | `POST /api/v1/meeting-points` | Validate request; đầu vào hợp lệ trả 503 |
 | `POST /api/v1/meeting-points/{request_id}/rerank` | Validate request; đầu vào hợp lệ trả 503 |
 
-Lỗi validation trả 400 `INVALID_COORDINATES` hoặc `INVALID_PARAMETERS`. Các mã lỗi
-nghiệp vụ khác và response thành công đã có schema, chưa có đầy đủ xử lý thực tế.
-503 là đúng ở trạng thái hiện tại: chưa có graph loader, dù artifact offline đã tồn tại.
+Đặt `W2M_GRAPH_DIR` trong `.env` trỏ đến thư mục đầu ra `validated` của bundle
+đồ thị offline. Backend nạp CSR ở startup. Các endpoint nghiệp vụ hiện trả 503
+sau validation. Lỗi validation trả 400 `INVALID_COORDINATES` hoặc
+`INVALID_PARAMETERS`.
 
 Có thể kiểm tra HTTP bằng:
 

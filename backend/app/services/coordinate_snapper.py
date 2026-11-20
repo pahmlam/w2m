@@ -1,7 +1,9 @@
 """Snap validated origins to directed roads without mutating shared graph data."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pyproj import Transformer
 from shapely import Point, STRtree
@@ -10,8 +12,10 @@ from shapely.geometry import LineString
 from app.config.settings import Settings
 from app.models.requests import MeetingRequest, Origin
 from app.services.area import METRIC_CRS, WGS84_CRS, covers_location
-from app.services.graph_loader import ReferenceGraph
-from app.services.graph_reverse_edges import EdgeId
+
+if TYPE_CHECKING:
+    from app.services.graph_loader import ReferenceGraph
+    from app.services.graph_reverse_edges import EdgeId
 
 ENDPOINT_ROUNDOFF_METERS = 1e-7
 _TO_METERS = Transformer.from_crs(WGS84_CRS, METRIC_CRS, always_xy=True)
