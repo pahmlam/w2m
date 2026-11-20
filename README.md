@@ -192,6 +192,27 @@ PYTHONPATH=backend uv run --project backend --locked --extra data python -m scri
   --output-dir backend/data/validated/hanoi-pilot-car-v1-csr-v1
 ```
 
+## Kiểm tra prototype tham chiếu M2
+
+Chạy bộ kiểm thử offline và xuất báo cáo trên bundle đã validation của M1:
+
+```bash
+uv run --project backend --locked --extra data pytest backend/tests \
+  --junitxml=backend/data/reports/m2-tests.xml
+
+PYTHONPATH=backend uv run --project backend --locked --extra data python -m scripts.validate_reference \
+  --bundle-dir backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
+  --output backend/data/reports/m2-reference.json \
+  --seed 20261115
+```
+
+CLI sinh bốn nguồn tổng hợp từ đường trong AOI, chạy NetworkX với cutoff 3.600
+giây rồi xuất kết quả tại phi 0/0,5/1. JSON chứa geometry, edge key, tổng thời
+gian gốc, kiểm tra Pareto của hạng 1, spacing và provenance để đối chiếu. Chọn
+tên output mới cho mỗi lần chạy; CLI không ghi đè báo cáo cũ và không tải OSM.
+Đây là kiểm tra prototype; TC-01–TC-12 chạy trong pytest, còn HTTP, cache,
+CSR production và TC-13–TC-16 được nghiệm thu ở các mốc tương ứng.
+
 ## Cấu trúc mã nguồn
 
 | Đường dẫn | Trách nhiệm |

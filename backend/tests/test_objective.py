@@ -20,7 +20,10 @@ def test_tc08_ten_thousand_pareto_pairs_eleven_phi_values() -> None:
     rng = np.random.default_rng(20261115)
     for _ in range(10000):
         u = tuple(rng.uniform(0, 5000, 4))
-        v = tuple(np.array(u) + rng.uniform(.01, 100, 4))
+        increments = np.zeros(4)
+        changed = rng.choice(4, size=int(rng.integers(1, 5)), replace=False)
+        increments[changed] = rng.uniform(.01, 100, len(changed))
+        v = tuple(np.array(u) + increments)
         for phi in np.linspace(0, 1, 11):
             assert owa_score(u, float(phi)) < owa_score(v, float(phi))
 
@@ -65,3 +68,25 @@ def test_raw_vector_breaks_quantization_tie_before_unfavorable_id() -> None:
     worse = score_candidate(1, (100.01, 100., 100., 100.), weights)
     assert better.score == worse.score
     assert better.sort_key < worse.sort_key
+
+
+def test_tc08_documented_pareto_example() -> None:
+    for phi in np.linspace(0, 1, 11):
+        assert owa_score((10., 10., 10., 30.), float(phi)) < owa_score(
+            (26., 27., 28., 31.), float(phi))
+
+
+def test_tc09_random_fairness_transfers_without_order_reversal() -> None:
+    rng = np.random.default_rng(20261115)
+    for _ in range(1000):
+        times = np.sort(rng.uniform(0, 5000, 4))
+        epsilon = float(rng.uniform(.01, .49) * min(times[1]-times[0], times[-1]-times[-2]))
+        fairer = times.copy()
+        fairer[0] += epsilon
+        fairer[-1] -= epsilon
+        for phi in np.linspace(0, 1, 11):
+            before = owa_score(tuple(times), float(phi))
+            after = owa_score(tuple(fairer), float(phi))
+            assert after <= before + 1e-9
+            if phi > 0:
+                assert after < before
