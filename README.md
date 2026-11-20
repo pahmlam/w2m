@@ -59,9 +59,10 @@ npm --prefix frontend run dev
 | `POST /api/v1/meeting-points/{request_id}/rerank` | Validate request; đầu vào hợp lệ trả 503 |
 
 Đặt `W2M_GRAPH_DIR` trong `.env` trỏ đến thư mục đầu ra `validated` của bundle
-đồ thị offline. Backend nạp CSR ở startup. Các endpoint nghiệp vụ hiện trả 503
-sau validation. Lỗi validation trả 400 `INVALID_COORDINATES` hoặc
-`INVALID_PARAMETERS`.
+đồ thị offline. Backend nạp CSR ở startup. `W2M_CSR_MAX_CONCURRENT_TASKS` giới hạn
+số tác vụ tính toán CSR chạy cùng lúc trên mỗi process backend, mặc định là 2.
+Các endpoint nghiệp vụ hiện trả 503 sau validation. Lỗi validation trả 400
+`INVALID_COORDINATES` hoặc `INVALID_PARAMETERS`.
 
 Có thể kiểm tra HTTP bằng:
 

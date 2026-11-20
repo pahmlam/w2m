@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     routing_area_path: Path = Path("backend/data/routing_area.geojson")
     osm_snapshot_dir: Path = Path("backend/data/osm")
     graph_dir: Path = Path("backend/data/graph")
+    csr_max_concurrent_tasks: Annotated[int, Field(gt=0)] = 2
     speed_profile_path: Path = Path("backend/app/config/speed_profiles/car-v1.yaml")
     buffer_m: Annotated[float, Field(gt=0, allow_inf_nan=False)] = 3000
     snap_max_m: Annotated[float, Field(gt=0, allow_inf_nan=False)] = 150

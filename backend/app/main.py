@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.api.meeting import router, unavailable
 from app.config.settings import get_settings
 from app.models.responses import ErrorResponse
+from app.services.csr_meeting_service import CSRMeetingService
 from app.services.graph_loader import load_csr_graph
 
 logger = logging.getLogger(__name__)
@@ -24,14 +26,23 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.csr_graph = None
+        app.state.csr_meeting_service = None
+        service = None
         try:
-            app.state.csr_graph = load_csr_graph(settings.graph_dir)
+            graph = await asyncio.to_thread(load_csr_graph, settings.graph_dir)
         except (BadZipFile, EOFError, KeyError, OSError, ParseError, TypeError, ValueError) as exc:
             logger.warning("CSR graph unavailable: %s", exc)
+        else:
+            service = CSRMeetingService(graph, settings.csr_max_concurrent_tasks)
+            app.state.csr_graph = graph
+            app.state.csr_meeting_service = service
         try:
             yield
         finally:
             app.state.csr_graph = None
+            app.state.csr_meeting_service = None
+            if service is not None:
+                await service.close()
 
     app = FastAPI(title="W2M API", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
