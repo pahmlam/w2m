@@ -13,7 +13,7 @@ from app.models.requests import Location
 from app.models.responses import MeetingResult
 from app.services.csr_shortest_path import CSRRoutingResult
 from app.services.objective import ScoredCandidate, owa_weights, score_candidate
-from app.services.route_builder import build_route
+from app.services.route_builder import build_csr_route, build_route
 
 if TYPE_CHECKING:
     from app.services.shortest_path import RoutingResult
@@ -121,22 +121,30 @@ def select_candidates(
 
 
 def build_meeting_results(
-    ranking: CandidateRanking[RoutingResult], *, top_k: int, min_spacing_meters: float,
+    ranking: CandidateRanking[RoutingResult] | CandidateRanking[CSRRoutingResult],
+    *, top_k: int, min_spacing_meters: float,
 ) -> list[MeetingResult]:
     """Select first, then build routes from the exact trees used for ranking."""
     selected = select_candidates(ranking, top_k=top_k, min_spacing_meters=min_spacing_meters)
     routing = ranking.routing
     results = []
     for rank, candidate in enumerate(selected, start=1):
-        node = routing.overlay.reference.graph.nodes[candidate.node_id]
-        routes = {source.snap.origin_id: build_route(routing.overlay, source, candidate.node_id)
-                  for source in routing.sources}
+        target = candidate.node_id
+        if isinstance(routing, CSRRoutingResult):
+            lon, lat = routing.graph.mappings["node_lonlat"][routing.graph.node_indices[target]]
+            routes = {label: build_csr_route(routing, label, target)
+                      for label in ranking.origin_ids}
+        else:
+            node = routing.overlay.reference.graph.nodes[target]
+            lon, lat = node["lon"], node["lat"]
+            routes = {source.snap.origin_id: build_route(routing.overlay, source, target)
+                      for source in routing.sources}
         travel_times = dict(zip(ranking.origin_ids, candidate.travel_times_seconds))
         if any(route.duration_seconds != travel_times[label] for label, route in routes.items()):
             raise ValueError("Route duration does not match ranked travel time")
         results.append(MeetingResult(
             rank=rank, node_id=candidate.node_id,
-            location=Location(lat=node["lat"], lon=node["lon"]),
+            location=Location(lat=lat, lon=lon),
             travel_times=travel_times, max_time=candidate.max_time, min_time=candidate.min_time,
             difference=candidate.difference, avg_time=candidate.avg_time, score=candidate.score,
             routes=routes,

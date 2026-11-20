@@ -6,14 +6,17 @@ from pathlib import Path
 import numpy as np
 import pytest
 from scipy.sparse.csgraph import dijkstra
+from test_coordinate_snapper import TO_WGS84
 from test_csr_graph_loader import csr_bundle as csr_bundle
 
+from app.models.responses import Route
 from app.services.coordinate_snapper import SnapResult
 from app.services.csr_overlay import SourceFragment, build_csr_overlay
 from app.services.csr_route_edges import CSRRouteEdge, trace_csr_route_edges
-from app.services.csr_shortest_path import NO_PREDECESSOR, route_csr_origins
+from app.services.csr_shortest_path import NO_PREDECESSOR, CSRRoutingResult, route_csr_origins
 from app.services.graph_loader import load_csr_graph
-from app.services.meeting_optimizer import rank_candidates, select_candidates
+from app.services.meeting_optimizer import build_meeting_results, rank_candidates, select_candidates
+from app.services.route_builder import build_csr_route
 
 
 def _two_way_snap(origin_id: str = "A") -> SnapResult:
@@ -209,3 +212,56 @@ def test_csr_reranking_filters_raw_cutoff_and_preserves_pareto_ties(
     assert [c.node_id for c in reduced.candidates] == [7]
     with pytest.raises(ValueError, match="coverage"):
         rank_candidates(routing, phi=0.5, max_travel_seconds=302)
+
+
+def test_csr_route_joins_curved_partial_edge_and_persistent_edge(csr_bundle: Path) -> None:
+    graph = load_csr_graph(csr_bundle)
+    parallel = replace(_two_way_snap(), edge_id=(-3, 7, 1), reverse_edge_id=None,
+                       snapped_xy=(500005, 2300002.5), access_seconds=0.06)
+    routing = route_csr_origins(graph, [parallel, _two_way_snap("B")], 31)
+    route = build_csr_route(routing, "A", -3)
+
+    assert route.geometry.coordinates == [TO_WGS84.transform(*xy) for xy in [
+        (500005, 2300002.5), (500010, 2300005), (500020, 2300000), (500000, 2300000),
+    ]]
+    assert route.distance_meters == pytest.approx(20 + 0.75 * (20**2 + 10**2)**0.5)
+    assert (route.duration_seconds, route.access_seconds, route.network_seconds) == (26.1, 0.1, 26)
+    reverse = build_csr_route(routing, "B", -3)
+    assert reverse.geometry.coordinates == [TO_WGS84.transform(500005, 2300000),
+                                            TO_WGS84.transform(500000, 2300000)]
+    assert reverse.distance_meters == 5
+
+
+def test_csr_results_build_geometry_only_after_selection(
+    csr_bundle: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    graph = load_csr_graph(csr_bundle)
+    graph = replace(graph, _mappings={**graph.mappings, "is_candidate": np.array([True, True])})
+    parallel = replace(_two_way_snap(), edge_id=(-3, 7, 1), reverse_edge_id=None,
+                       snapped_xy=(500005, 2300002.5))
+    endpoint = replace(_two_way_snap("D"), theta=1, source_node_id=7,
+                       snapped_xy=(500020, 2300000), access_seconds=0)
+    routing = route_csr_origins(graph, [*(replace(parallel, origin_id=i) for i in "ABC"), endpoint],
+                                100)
+    calls = []
+
+    def record_route(data: CSRRoutingResult, origin_id: str, target: int) -> Route:
+        calls.append((origin_id, target))
+        return build_csr_route(data, origin_id, target)
+
+    monkeypatch.setattr("app.services.meeting_optimizer.build_csr_route", record_route)
+    monkeypatch.setattr("app.services.csr_shortest_path.dijkstra",
+                        lambda *a, **k: pytest.fail("Rerouted"))
+    ranking = rank_candidates(routing, phi=0.5, max_travel_seconds=100)
+    assert len(ranking.candidates) == 2
+    assert calls == []
+    result, = build_meeting_results(ranking, top_k=5, min_spacing_meters=500)
+    assert result.node_id == 7
+    assert calls == [(label, 7) for label in "ABCD"]
+    assert {label: route.duration_seconds for label, route in result.routes.items()} == (
+        result.travel_times
+    )
+    zero = result.routes["D"]
+    target = TO_WGS84.transform(500020, 2300000)
+    assert zero.distance_meters == zero.network_seconds == 0
+    assert zero.geometry.coordinates == [target, target]
