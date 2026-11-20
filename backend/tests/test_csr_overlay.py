@@ -1,4 +1,4 @@
-"""Verify directed request-local sources over an immutable CSR bundle."""
+"""Verify request-local overlays and shortest paths over an immutable CSR bundle."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -10,6 +10,7 @@ from test_csr_graph_loader import csr_bundle as csr_bundle
 
 from app.services.coordinate_snapper import SnapResult
 from app.services.csr_overlay import SourceFragment, build_csr_overlay
+from app.services.csr_shortest_path import NO_PREDECESSOR, route_csr_origins
 from app.services.graph_loader import load_csr_graph
 
 
@@ -79,3 +80,43 @@ def test_rejects_too_many_or_duplicate_source_ids(csr_bundle: Path) -> None:
         build_csr_overlay(graph, [_two_way_snap(str(i)) for i in range(5)])
     with pytest.raises(ValueError, match="unique"):
         build_csr_overlay(graph, [_two_way_snap(), _two_way_snap()])
+
+
+def test_routes_four_sources_with_individual_cutoffs(csr_bundle: Path) -> None:
+    graph = load_csr_graph(csr_bundle)
+    first = _two_way_snap()
+    second = replace(first, origin_id="B", access_seconds=11)
+    endpoint = replace(first, origin_id="C", theta=1, source_node_id=7,
+                       snapped_xy=(500020, 2300000), access_seconds=13.75)
+    over_limit = replace(first, origin_id="D", access_seconds=14)
+    result = route_csr_origins(graph, [first, second, endpoint, over_limit], 13.75)
+
+    assert result.graph is graph
+    assert [paths.snap.origin_id for paths in result.sources] == ["A", "B", "C", "D"]
+    assert [paths.network_cutoff_seconds for paths in result.sources] == [3.75, 2.75, 0, -0.25]
+    assert [paths.source_index for paths in result.sources] == [2, 3, 1, 4]
+    np.testing.assert_array_equal([paths.distances_seconds for paths in result.sources], [
+        [2.75, 3.75], [2.75, np.inf], [np.inf, 0], [np.inf, np.inf],
+    ])
+    np.testing.assert_array_equal([paths.predecessors for paths in result.sources], [
+        [2, 2], [3, NO_PREDECESSOR], [NO_PREDECESSOR, NO_PREDECESSOR],
+        [NO_PREDECESSOR, NO_PREDECESSOR],
+    ])
+
+
+def test_predecessors_trace_persistent_and_temporary_arcs(csr_bundle: Path) -> None:
+    graph = load_csr_graph(csr_bundle)
+    parallel = replace(_two_way_snap(), edge_id=(-3, 7, 1), reverse_edge_id=None,
+                       theta=0.5, snapped_xy=(500010, 2300005))
+    result = route_csr_origins(graph, [parallel], 31)
+    paths = result.sources[0]
+    np.testing.assert_array_equal(paths.distances_seconds, [21, 10])
+    np.testing.assert_array_equal(paths.predecessors, [1, paths.source_index])
+    assert result.overlay.fragments[paths.predecessors[1], 1] == SourceFragment(1, 0.5)
+    assert graph.csr.data.tolist() == [5, 11]
+
+
+@pytest.mark.parametrize("limit", [-1, np.nan, np.inf, True])
+def test_routing_rejects_invalid_travel_cutoff(csr_bundle: Path, limit: float) -> None:
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        route_csr_origins(load_csr_graph(csr_bundle), [_two_way_snap()], limit)
