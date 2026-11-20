@@ -100,6 +100,7 @@ def test_routes_four_sources_with_individual_cutoffs(csr_bundle: Path) -> None:
     assert [paths.snap.origin_id for paths in result.sources] == ["A", "B", "C", "D"]
     assert [paths.network_cutoff_seconds for paths in result.sources] == [3.75, 2.75, 0, -0.25]
     assert [paths.source_index for paths in result.sources] == [2, 3, 1, 4]
+    assert [paths.reachable_node_count for paths in result.sources] == [2, 1, 1, 0]
     np.testing.assert_array_equal([paths.distances_seconds for paths in result.sources], [
         [2.75, 3.75], [2.75, np.inf], [np.inf, 0], [np.inf, np.inf],
     ])

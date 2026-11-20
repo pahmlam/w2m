@@ -127,6 +127,7 @@ def test_compute_request_measures_the_actual_pipeline_boundaries(
     assert computation.timings_ms.model_dump() == {
         "snap": 0.125, "dijkstra": 1.0, "scan": 2.0, "rank": 7.0, "routes": 5.0, "total": 19.125,
     }
+    assert computation.reachable_nodes_by_origin == dict.fromkeys("ABCD", 2)
     result, = computation.results
     assert result.node_id == 7
     assert result.travel_times == {"A": 15, "B": 3.8, "C": 3.8, "D": 3.8}

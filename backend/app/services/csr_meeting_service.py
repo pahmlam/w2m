@@ -19,10 +19,11 @@ from app.services.meeting_optimizer import (
 
 @dataclass(frozen=True)
 class CSRMeetingComputation:
-    """Meeting results and elapsed worker time per pipeline stage."""
+    """Meeting results, elapsed worker time, and reachability per origin."""
 
     results: list[MeetingResult]
     timings_ms: Timings
+    reachable_nodes_by_origin: dict[str, int]
 
 
 class CSRMeetingService:
@@ -76,6 +77,9 @@ class CSRMeetingService:
     ) -> CSRMeetingComputation:
         limit = optimization.max_travel_seconds
         routing = route_csr_origins(self._graph, snaps, limit)
+        reachable_nodes = {
+            source.snap.origin_id: source.reachable_node_count for source in routing.sources
+        }
         ranking = rank_candidates(routing, phi=optimization.phi, max_travel_seconds=limit)
         selection_start = perf_counter_ns()
         selected = select_candidates(
@@ -84,11 +88,12 @@ class CSRMeetingService:
         routes_start = perf_counter_ns()
         results = build_selected_meeting_results(ranking, selected)
         ended = perf_counter_ns()
-        return CSRMeetingComputation(results, Timings(
+        timings = Timings(
             snap=(snap_end - started) / 1e6,
             dijkstra=routing.dijkstra_ms,
             scan=ranking.scan_ms,
             rank=ranking.rank_ms + (routes_start - selection_start) / 1e6,
             routes=(ended - routes_start) / 1e6,
             total=(ended - started) / 1e6,
-        ))
+        )
+        return CSRMeetingComputation(results, timings, reachable_nodes)

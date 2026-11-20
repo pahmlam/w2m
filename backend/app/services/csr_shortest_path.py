@@ -30,6 +30,11 @@ class CSRSourcePaths:
     distances_seconds: np.ndarray
     predecessors: np.ndarray
 
+    @property
+    def reachable_node_count(self) -> int:
+        """Count persistent nodes with a finite distance within this source's cutoff."""
+        return int(np.count_nonzero(np.isfinite(self.distances_seconds)))
+
 
 @dataclass(frozen=True)
 class CSRRoutingResult:
