@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import hypot, isfinite
+from time import perf_counter_ns
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -29,6 +30,8 @@ class CandidateRanking[RoutingT: (RoutingResult, CSRRoutingResult)]:
     max_travel_seconds: float
     weights: tuple[float, ...]
     candidates: tuple[ScoredCandidate, ...]
+    scan_ms: float = field(default=0.0, compare=False)
+    rank_ms: float = field(default=0.0, compare=False)
 
 
 def _candidate_network_times(
@@ -74,6 +77,7 @@ def rank_candidates[RoutingT: (RoutingResult, CSRRoutingResult)](
             raise ValueError("Invalid source access time or computed cutoff")
         if max_travel_seconds - access > cutoff:
             raise ValueError("Requested limit exceeds computed routing coverage")
+    scan_start = perf_counter_ns()
     candidates = []
     for node, network_times in _candidate_network_times(routing):
         if any(value < 0 for value in network_times):
@@ -83,8 +87,13 @@ def rank_candidates[RoutingT: (RoutingResult, CSRRoutingResult)](
         if any(not isfinite(value) or value > max_travel_seconds for value in raw_times):
             continue
         candidates.append(score_candidate(node, raw_times, weights))
+    rank_start = perf_counter_ns()
     candidates.sort(key=lambda candidate: candidate.sort_key)
-    return CandidateRanking(routing, ids, phi, max_travel_seconds, weights, tuple(candidates))
+    ordered = tuple(candidates)
+    return CandidateRanking(
+        routing, ids, phi, max_travel_seconds, weights, ordered,
+        (rank_start - scan_start) / 1e6, (perf_counter_ns() - rank_start) / 1e6,
+    )
 
 
 def select_candidates(
@@ -126,6 +135,14 @@ def build_meeting_results(
 ) -> list[MeetingResult]:
     """Select first, then build routes from the exact trees used for ranking."""
     selected = select_candidates(ranking, top_k=top_k, min_spacing_meters=min_spacing_meters)
+    return build_selected_meeting_results(ranking, selected)
+
+
+def build_selected_meeting_results(
+    ranking: CandidateRanking[RoutingResult] | CandidateRanking[CSRRoutingResult],
+    selected: tuple[ScoredCandidate, ...],
+) -> list[MeetingResult]:
+    """Build the response entries for the candidates already selected."""
     routing = ranking.routing
     results = []
     for rank, candidate in enumerate(selected, start=1):

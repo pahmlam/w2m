@@ -1,8 +1,9 @@
 """Directed shortest paths over a request-local CSR overlay."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import isfinite
+from time import perf_counter_ns
 
 import numpy as np
 from scipy.sparse.csgraph import dijkstra
@@ -37,6 +38,7 @@ class CSRRoutingResult:
     graph: CSRGraph
     overlay: CSROverlay
     sources: tuple[CSRSourcePaths, ...]
+    dijkstra_ms: float = field(default=0.0, compare=False)
 
 
 def route_csr_origins(
@@ -50,6 +52,7 @@ def route_csr_origins(
     overlay = build_csr_overlay(graph, snaps)
     node_count = len(graph.node_indices)
     sources = []
+    started = perf_counter_ns()
     for snap in snaps:
         source = overlay.sources[snap.origin_id]
         cutoff = max_travel_seconds - snap.access_seconds
@@ -64,4 +67,4 @@ def route_csr_origins(
         sources.append(CSRSourcePaths(
             snap, source, cutoff, distances[:node_count], predecessors[:node_count],
         ))
-    return CSRRoutingResult(graph, overlay, tuple(sources))
+    return CSRRoutingResult(graph, overlay, tuple(sources), (perf_counter_ns() - started) / 1e6)

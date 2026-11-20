@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.api.meeting import router, unavailable
 from app.config.settings import get_settings
 from app.models.responses import ErrorResponse
+from app.services.coordinate_snapper import CoordinateSnapper
 from app.services.csr_meeting_service import CSRMeetingService
 from app.services.graph_loader import load_csr_graph
 
@@ -30,10 +31,11 @@ def create_app() -> FastAPI:
         service = None
         try:
             graph = await asyncio.to_thread(load_csr_graph, settings.graph_dir)
+            snapper = await asyncio.to_thread(CoordinateSnapper, graph, settings)
         except (BadZipFile, EOFError, KeyError, OSError, ParseError, TypeError, ValueError) as exc:
             logger.warning("CSR graph unavailable: %s", exc)
         else:
-            service = CSRMeetingService(graph, settings.csr_max_concurrent_tasks)
+            service = CSRMeetingService(graph, settings.csr_max_concurrent_tasks, snapper=snapper)
             app.state.csr_graph = graph
             app.state.csr_meeting_service = service
         try:

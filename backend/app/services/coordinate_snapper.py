@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+import numpy as np
 from pyproj import Transformer
 from shapely import Point, STRtree
 from shapely.geometry import LineString
@@ -12,6 +13,7 @@ from shapely.geometry import LineString
 from app.config.settings import Settings
 from app.models.requests import MeetingRequest, Origin
 from app.services.area import METRIC_CRS, WGS84_CRS, covers_location
+from app.services.graph_loader import CSRGraph
 
 if TYPE_CHECKING:
     from app.services.graph_loader import ReferenceGraph
@@ -47,25 +49,47 @@ class SnapResult:
     source_node_id: int | None
 
 
-class CoordinateSnapper:
+class CoordinateSnapper[GraphT: (ReferenceGraph, CSRGraph)]:
     """Build a reusable index of all physical roads, including non-candidate roads."""
 
-    def __init__(self, reference: ReferenceGraph, settings: Settings) -> None:
+    def __init__(self, reference: GraphT, settings: Settings) -> None:
         self.reference = reference
         self.snap_max_m = settings.snap_max_m
         self.access_speed_mps = settings.access_speed_mps
-        self.reverse: dict[EdgeId, EdgeId] = {}
-        for pair in reference.reverse_mapping["pairs"]:
-            forward, reverse = tuple(pair["forward"]), tuple(pair["reverse"])
-            line = reference.graph.edges[forward]["geometry"]
-            other = reference.graph.edges[reverse]["geometry"]
-            if not line.equals_exact(LineString(list(other.coords)[::-1]), 0):
-                raise ValueError("Paired snapping roads require exactly reversed geometry")
-            self.reverse[forward] = reverse
-            self.reverse[reverse] = forward
-        self.edge_ids = tuple(edge for edge in sorted(reference.graph.edges(keys=True))
-                              if edge not in self.reverse or edge < self.reverse[edge])
-        self.tree = STRtree([reference.graph.edges[edge]["geometry"] for edge in self.edge_ids])
+        if isinstance(reference, CSRGraph):
+            edge_ids = [tuple(row) for row in reference.mappings["edge_ids"].tolist()]
+            geometry = reference.geometry
+            coords, offsets = geometry["coordinates"], geometry["offsets"]
+            self.reverse = {edge_ids[a]: edge_ids[b]
+                            for a, b in reference.reverse_edge_indices.items()}
+            roads = []
+            for edge in sorted(reference.edge_indices):
+                opposite = self.reverse.get(edge)
+                if opposite is not None and edge > opposite:
+                    continue
+                i = reference.edge_indices[edge]
+                points = coords[offsets[i]:offsets[i + 1]]
+                if opposite is not None:
+                    j = reference.edge_indices[opposite]
+                    if not np.array_equal(points, coords[offsets[j]:offsets[j + 1]][::-1]):
+                        raise ValueError("Paired snapping roads require exactly reversed geometry")
+                roads.append((edge, LineString(points)))
+        else:
+            self.reverse = {}
+            for pair in reference.reverse_mapping["pairs"]:
+                forward, reverse = tuple(pair["forward"]), tuple(pair["reverse"])
+                line = reference.graph.edges[forward]["geometry"]
+                other = reference.graph.edges[reverse]["geometry"]
+                if not line.equals_exact(LineString(list(other.coords)[::-1]), 0):
+                    raise ValueError("Paired snapping roads require exactly reversed geometry")
+                self.reverse[forward] = reverse
+                self.reverse[reverse] = forward
+            roads = [(edge, reference.graph.edges[edge]["geometry"])
+                     for edge in sorted(reference.graph.edges(keys=True))
+                     if edge not in self.reverse or edge < self.reverse[edge]]
+        self.edge_ids = tuple(edge for edge, _ in roads)
+        self._tree_indices = {edge: i for i, edge in enumerate(self.edge_ids)}
+        self.tree = STRtree([line for _, line in roads])
 
     def snap_origins(self, request: MeetingRequest) -> tuple[SnapResult, ...]:
         """Check every origin's coverage before snapping; preserve input order and duplicates."""
@@ -77,7 +101,7 @@ class CoordinateSnapper:
     def _snap_origin(self, origin: Origin) -> SnapResult:
         point = Point(*_TO_METERS.transform(origin.lon, origin.lat, errcheck=True))
         edge, along, projected, distance = self._project(point)
-        line = self.reference.graph.edges[edge]["geometry"]
+        line = self.tree.geometries[self._tree_indices[edge]]
         node_id = None
         # WGS84 roundtrips of generated M1 nodes can differ by a few nanometers.
         endpoint = 0 if along <= line.length / 2 else 1

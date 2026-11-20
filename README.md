@@ -61,6 +61,9 @@ npm --prefix frontend run dev
 Đặt `W2M_GRAPH_DIR` trong `.env` trỏ đến thư mục đầu ra `validated` của bundle
 đồ thị offline. Backend nạp CSR ở startup. `W2M_CSR_MAX_CONCURRENT_TASKS` giới hạn
 số tác vụ tính toán CSR chạy cùng lúc trên mỗi process backend, mặc định là 2.
+Service CSR đo từng bước theo mili giây. `scan` gồm lọc và tính điểm OWA.
+`rank` gồm sắp xếp và chọn điểm theo khoảng cách. `total` đo từ khi tác vụ
+bắt đầu chạy đến khi dựng xong kết quả, bao gồm cả bước tạo overlay.
 Các endpoint nghiệp vụ hiện trả 503 sau validation. Lỗi validation trả 400
 `INVALID_COORDINATES` hoặc `INVALID_PARAMETERS`.
 
