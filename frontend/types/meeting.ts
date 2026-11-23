@@ -18,7 +18,7 @@ export interface Optimization {
 export interface MeetingRequest {
   origins: Origin[];
   travel_mode: "car";
-  optimization: Optimization;
+  optimization?: Partial<Optimization>;
 }
 
 export interface RerankRequest {

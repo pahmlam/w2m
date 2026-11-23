@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadMapAoi } from "../services/mapConfig.ts";
+import { loadMapAoi } from "../services/meetingApi.ts";
 
 const aoi = {
   type: "Polygon",

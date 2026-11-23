@@ -21,3 +21,69 @@ h1 { font-size: 2rem; margin: 0; }
 .map-status p { margin: 0; }
 .map-status button { padding: 6px 12px; font: inherit; cursor: pointer; }
 .aoi-key { display: inline-block; width: 16px; border-top: 3px solid #07664d; }
+
+.meeting-layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(240px, 3fr); gap: 20px; }
+.origins {
+  align-self: start;
+  padding: 18px;
+  border: 1px solid #bdccc2;
+  border-radius: 12px;
+  background: #fff;
+}
+.origins h2 { margin: 0; font-size: 1.25rem; }
+.origins p { margin: 12px 0; line-height: 1.5; }
+.origin-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.origins button, .origins input {
+  min-height: 42px;
+  border: 1px solid #849b90;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.origins button { cursor: pointer; }
+.origins button:disabled { cursor: default; }
+.origin-options button[aria-pressed="true"] { background: #17332c; color: #fff; }
+.origins :focus-visible { outline: 2px solid #07664d; outline-offset: 2px; }
+.origin-form fieldset { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.origin-form legend { margin-bottom: 8px; padding: 0; font-weight: 600; }
+.origin-form label { display: grid; gap: 4px; }
+.origin-form input { min-width: 0; width: 100%; padding: 6px 10px; }
+.origin-error { color: #a12424; }
+.origins .find-meeting {
+  width: 100%;
+  margin-top: 16px;
+  background: #17332c;
+  color: #fff;
+  font-weight: 600;
+}
+.origins .find-meeting:disabled { background: #e5ece7; color: #52655c; }
+.meeting-results { margin-top: 18px; padding-top: 16px; border-top: 1px solid #bdccc2; }
+.meeting-results ol { display: grid; gap: 10px; margin: 0; padding-left: 24px; }
+.meeting-results li span { display: block; font-size: 0.875rem; }
+.meeting-results-stale { color: #52655c; }
+
+.origin-marker[data-person="A"] { background: #075e46; }
+.origin-marker[data-person="B"] { background: #18558c; }
+.origin-marker[data-person="C"] { background: #943a21; }
+.origin-marker[data-person="D"] { background: #634389; }
+.origin-marker {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px #17332c80;
+  color: #fff;
+  font-weight: 700;
+  cursor: grab;
+}
+.origin-marker:active { cursor: grabbing; }
+.origin-marker--selected { z-index: 1; outline: 2px solid #17332c; }
+
+@media (max-width: 720px) {
+  main { padding: 16px; }
+  .meeting-layout { grid-template-columns: minmax(0, 1fr); }
+  .map { height: max(320px, 50dvh); }
+}

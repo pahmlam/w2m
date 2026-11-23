@@ -51,6 +51,7 @@ npm --prefix frontend run dev
 
 Trang chính tải AOI từ `GET /api/v1/map/config` và căn bản đồ theo phạm vi này.
 Nếu graph chưa sẵn sàng, bấm **Thử lại** sau khi `GET /ready` trả 200.
+Đặt đủ bốn vị trí A–D rồi bấm **Tìm điểm gặp** để xem danh sách theo thứ hạng từ backend.
 
 ### Bản đồ nền local
 
@@ -102,7 +103,7 @@ uv run --project backend --locked --extra data pytest backend/tests
 npm --prefix frontend run lint
 npm --prefix frontend run typecheck
 npm --prefix frontend run build
-node --test frontend/tests/mapConfig.test.mjs
+node --test frontend/tests/*.test.mjs
 ```
 
 Test backend dùng fixture cố định và OSMnx giả lập cho bước tải; không gọi OSM hoặc
