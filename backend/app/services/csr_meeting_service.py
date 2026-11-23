@@ -19,11 +19,13 @@ from app.services.meeting_optimizer import (
 
 @dataclass(frozen=True)
 class CSRMeetingComputation:
-    """Meeting results, elapsed worker time, and reachability per origin."""
+    """Meeting results and the source, objective, and timing data behind them."""
 
     results: list[MeetingResult]
     timings_ms: Timings
     reachable_nodes_by_origin: dict[str, int]
+    snaps: tuple[SnapResult, ...]
+    objective_weights: tuple[float, ...]
 
 
 class CSRMeetingService:
@@ -96,4 +98,4 @@ class CSRMeetingService:
             routes=(ended - routes_start) / 1e6,
             total=(ended - started) / 1e6,
         )
-        return CSRMeetingComputation(results, timings, reachable_nodes)
+        return CSRMeetingComputation(results, timings, reachable_nodes, snaps, ranking.weights)

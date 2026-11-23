@@ -105,4 +105,6 @@ def test_parameter_errors_and_unavailable_endpoints(meeting_payload):
 def test_openapi_documents_validation_as_400():
     operation = create_app().openapi()["paths"]["/api/v1/meeting-points"]["post"]
     assert "400" in operation["responses"]
-    assert "422" not in operation["responses"]
+    assert operation["responses"]["422"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorResponse",
+    }
