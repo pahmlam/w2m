@@ -1,10 +1,20 @@
-import type { MeetingRequest, MeetingResult, Origin, Polygon } from "../types/meeting";
+import type { Location, MeetingRequest, MeetingResult, Origin, Polygon, Route, SnappedOrigin } from "../types/meeting";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 
-export type MeetingOutcome =
-  | { status: "success"; results: Pick<MeetingResult, "rank" | "location" | "score">[] }
-  | { status: "empty"; minimum?: { seconds: number; lowerBound: boolean } };
+export type OriginSnap = SnappedOrigin & { input: Location };
+
+export type DisplayedResult = Pick<MeetingResult,
+  "rank" | "location" | "score" | "travel_times" | "min_time" | "max_time" | "difference" | "avg_time"> & {
+    routes: Record<string, Route["geometry"]>;
+  };
+
+export type MeetingOutcome = { snaps: OriginSnap[] } & (
+  | { status: "success"; results: DisplayedResult[] }
+  | { status: "empty"; minimum?: { seconds: number; lowerBound: boolean } }
+);
+
+const INVALID_MEETING_RESPONSE = "Backend trả về kết quả điểm gặp không hợp lệ.";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
@@ -19,6 +29,22 @@ function isPosition(value: unknown): value is [number, number] {
   const [lon, lat] = value;
   return typeof lon === "number" && Math.abs(lon) <= 180
     && typeof lat === "number" && Math.abs(lat) <= 90;
+}
+
+function parseLocation(value: unknown): Location {
+  const position = isObject(value) ? [value.lon, value.lat] : null;
+  if (!isPosition(position)) throw new Error(INVALID_MEETING_RESPONSE);
+  const [lon, lat] = position;
+  return { lat, lon };
+}
+
+function parseRouteGeometry(value: unknown): Route["geometry"] {
+  const geometry = isObject(value) ? value.geometry : null;
+  if (!isObject(geometry) || geometry.type !== "LineString" || !Array.isArray(geometry.coordinates)
+    || geometry.coordinates.length < 2 || !geometry.coordinates.every(isPosition)) {
+    throw new Error(INVALID_MEETING_RESPONSE);
+  }
+  return { type: geometry.type, coordinates: geometry.coordinates };
 }
 
 function isRing(value: unknown): value is [number, number][] {
@@ -47,34 +73,64 @@ export async function loadMapAoi(signal: AbortSignal): Promise<Polygon> {
   return { type: aoi.type, coordinates: aoi.coordinates };
 }
 
-function parseOutcome(payload: unknown): MeetingOutcome {
-  const invalidResponse = "Backend trả về kết quả điểm gặp không hợp lệ.";
-  if (!isObject(payload) || !Array.isArray(payload.results)) throw new Error(invalidResponse);
+function parseSnaps(value: unknown, origins: Origin[]): OriginSnap[] {
+  if (!Array.isArray(value) || value.length !== origins.length) throw new Error(INVALID_MEETING_RESPONSE);
+  return origins.map(({ id, lat, lon }) => {
+    const snap: unknown = value.find((entry: unknown) => isObject(entry) && entry.id === id);
+    if (!isObject(snap) || !isNonnegativeNumber(snap.snap_distance_m)
+      || !isNonnegativeNumber(snap.access_seconds)) throw new Error(INVALID_MEETING_RESPONSE);
+    return {
+      id,
+      input: { lat, lon },
+      snapped: parseLocation(snap.snapped),
+      snap_distance_m: snap.snap_distance_m,
+      access_seconds: snap.access_seconds,
+    };
+  });
+}
+
+function parseOutcome(payload: unknown, origins: Origin[]): MeetingOutcome {
+  if (!isObject(payload) || !Array.isArray(payload.results)) throw new Error(INVALID_MEETING_RESPONSE);
+  const snaps = parseSnaps(payload.origins, origins);
 
   if (payload.status === "empty" && payload.results.length === 0) {
     const minimum = payload.min_required_seconds;
     if (isNonnegativeNumber(minimum)) {
-      return { status: "empty", minimum: { seconds: minimum, lowerBound: false } };
+      return { status: "empty", snaps, minimum: { seconds: minimum, lowerBound: false } };
     }
     if (typeof minimum === "string" && /^> \d+$/.test(minimum)) {
       const seconds = Number(minimum.slice(2));
-      if (isNonnegativeNumber(seconds)) return { status: "empty", minimum: { seconds, lowerBound: true } };
+      if (isNonnegativeNumber(seconds)) return { status: "empty", snaps, minimum: { seconds, lowerBound: true } };
     }
-    return { status: "empty" };
+    return { status: "empty", snaps };
   }
 
   if (payload.status !== "success" || payload.results.length < 1 || payload.results.length > 5) {
-    throw new Error(invalidResponse);
+    throw new Error(INVALID_MEETING_RESPONSE);
   }
   const results = payload.results.map((result: unknown, index: number) => {
-    if (!isObject(result) || result.rank !== index + 1 || !isNonnegativeNumber(result.score)
-      || !isObject(result.location)) throw new Error(invalidResponse);
-    const position = [result.location.lon, result.location.lat];
-    if (!isPosition(position)) throw new Error(invalidResponse);
-    const [lon, lat] = position;
-    return { rank: result.rank, score: result.score, location: { lat, lon } };
+    if (!isObject(result) || result.rank !== index + 1 || !isNonnegativeNumber(result.score)) {
+      throw new Error(INVALID_MEETING_RESPONSE);
+    }
+    const times = [result.min_time, result.max_time, result.difference, result.avg_time];
+    const travelTimes = result.travel_times;
+    const routeData = result.routes;
+    if (!times.every(isNonnegativeNumber) || !isObject(travelTimes) || !isObject(routeData)) {
+      throw new Error(INVALID_MEETING_RESPONSE);
+    }
+    const travel_times = Object.fromEntries(origins.map(({ id }) => {
+      const seconds = travelTimes[id];
+      if (!isNonnegativeNumber(seconds)) throw new Error(INVALID_MEETING_RESPONSE);
+      return [id, seconds] as const;
+    }));
+    const routes = Object.fromEntries(origins.map(({ id }) => [id, parseRouteGeometry(routeData[id])]));
+    const [min_time, max_time, difference, avg_time] = times;
+    return {
+      rank: result.rank, score: result.score, location: parseLocation(result.location),
+      travel_times, min_time, max_time, difference, avg_time, routes,
+    };
   });
-  return { status: "success", results };
+  return { status: "success", snaps, results };
 }
 
 export async function findMeetingPoints(origins: Origin[], signal: AbortSignal): Promise<MeetingOutcome> {
@@ -108,13 +164,13 @@ export async function findMeetingPoints(origins: Origin[], signal: AbortSignal):
     }
     const payload: unknown = await response.json();
     requestSignal.throwIfAborted();
-    return parseOutcome(payload);
+    return parseOutcome(payload, origins);
   } catch (error) {
     if (timeout.aborted && requestSignal.reason === timeout.reason) {
       throw new Error("Tính điểm gặp quá lâu. Hãy thử lại.");
     }
     if (error instanceof TypeError) throw new Error("Không kết nối được với backend. Hãy thử lại.");
-    if (error instanceof SyntaxError) throw new Error("Backend trả về kết quả điểm gặp không hợp lệ.");
+    if (error instanceof SyntaxError) throw new Error(INVALID_MEETING_RESPONSE);
     throw error;
   }
 }

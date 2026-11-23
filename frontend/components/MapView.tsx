@@ -3,10 +3,15 @@
 import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
 import type { Map, MapMouseEvent, Marker, StyleSpecification } from "maplibre-gl";
 
+import MeetingMarkers from "@/components/MeetingMarkers";
 import MeetingResults from "@/components/MeetingResults";
 import OriginMarker from "@/components/OriginMarker";
+import RouteLayer from "@/components/RouteLayer";
+import SnapDetails from "@/components/SnapDetails";
+import SnapLayer from "@/components/SnapLayer";
 import { findMeetingPoints, loadMapAoi, type MeetingOutcome } from "@/services/meetingApi";
 import type { Location, Polygon } from "@/types/meeting";
+import { coordinateBounds } from "@/utils/meetingDisplay";
 import { ORIGIN_IDS, parseOriginCoordinate, validateOriginLocation, type OriginId } from "@/utils/originLocation";
 
 const OSM_ATTRIBUTION = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';
@@ -45,6 +50,12 @@ export default function MapView() {
   const [draft, setDraft] = useState<{ lat: string; lon: string } | null>(null);
   const [originError, setOriginError] = useState("");
   const [search, setSearch] = useState<MeetingSearch>({ status: "idle" });
+  const [selectedMeetingRank, setSelectedMeetingRank] = useState<number | null>(null);
+  const [hiddenRoutes, setHiddenRoutes] = useState<ReadonlySet<OriginId>>(() => new Set());
+  const visibleSnaps = search.status === "result" && !search.stale ? search.outcome.snaps : null;
+  const visibleMeetings = search.status === "result" && !search.stale && search.outcome.status === "success"
+    ? search.outcome.results : null;
+  const selectedMeeting = visibleMeetings?.find(({ rank }) => rank === selectedMeetingRank);
   const map = mapRuntime?.map;
   const location = locations[selected];
   const fields = draft ?? { lat: location?.lat.toString() ?? "", lon: location?.lon.toString() ?? "" };
@@ -85,7 +96,7 @@ export default function MapView() {
 
   const placeOnMap = useEffectEvent((event: MapMouseEvent) => {
     const target = event.originalEvent.target;
-    if (target instanceof Element && target.closest(".origin-marker")) return;
+    if (target instanceof Element && target.closest(".origin-marker, .meeting-marker")) return;
     const { lng, lat } = event.lngLat.wrap();
     saveLocation(selected, { lat, lon: lng });
   });
@@ -101,6 +112,8 @@ export default function MapView() {
 
     const request = new AbortController();
     pendingMeeting.current = request;
+    setSelectedMeetingRank(null);
+    setHiddenRoutes(new Set());
     setSearch({ status: "loading" });
     try {
       const outcome = await findMeetingPoints(origins, request.signal);
@@ -115,6 +128,14 @@ export default function MapView() {
     } finally {
       if (pendingMeeting.current === request) pendingMeeting.current = null;
     }
+  }
+
+  function toggleRoute(id: OriginId) {
+    setHiddenRoutes((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   }
 
   useEffect(() => () => pendingMeeting.current?.abort(), []);
@@ -183,16 +204,7 @@ export default function MapView() {
       id: "w2m-aoi-outline", source: "w2m-aoi", type: "line",
       paint: { "line-color": "#07664d", "line-width": 3 },
     });
-    const ring = aoi.coordinates[0];
-    let [west, south] = ring[0];
-    let [east, north] = ring[0];
-    for (const [lon, lat] of ring) {
-      west = Math.min(west, lon);
-      south = Math.min(south, lat);
-      east = Math.max(east, lon);
-      north = Math.max(north, lat);
-    }
-    map.fitBounds([west, south, east, north], { padding: 32, duration: 0, maxZoom: 16 });
+    map.fitBounds(coordinateBounds(aoi.coordinates[0]), { padding: 32, duration: 0, maxZoom: 16 });
     const onClick = (event: MapMouseEvent) => placeOnMap(event);
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
@@ -200,8 +212,10 @@ export default function MapView() {
 
   return (
     <div className="meeting-layout">
-      <section aria-label="Bản đồ Hà Nội">
+      <section className="meeting-map" id="meeting-map" aria-label="Bản đồ Hà Nội">
         <div className="map" ref={container} />
+        {map && visibleSnaps && <SnapLayer map={map} snaps={visibleSnaps} />}
+        {map && selectedMeeting && <RouteLayer map={map} routes={selectedMeeting.routes} hidden={hiddenRoutes} />}
         {mapRuntime && ORIGIN_IDS.map((id) => {
           const position = locations[id];
           return position && (
@@ -209,6 +223,10 @@ export default function MapView() {
               id={id} location={position} selected={selected === id} onMove={saveLocation} />
           );
         })}
+        {mapRuntime && visibleMeetings && (
+          <MeetingMarkers map={mapRuntime.map} MarkerClass={mapRuntime.MarkerClass} results={visibleMeetings}
+            selectedRank={selectedMeeting?.rank ?? null} onSelect={setSelectedMeetingRank} />
+        )}
         <div className="map-status">
           <p role="status">
             {coverage.status === "loading" && "Đang tải phạm vi hỗ trợ…"}
@@ -224,6 +242,9 @@ export default function MapView() {
             }}>Thử lại</button>
           )}
           {mapError && <p role="status">{mapError}</p>}
+          {map && visibleSnaps && (
+            <p><span className="snap-key" aria-hidden="true" /> Điểm snap · Nét đứt là đoạn tiếp cận</p>
+          )}
         </div>
       </section>
       <section className="origins" aria-labelledby="origins-heading">
@@ -270,7 +291,12 @@ export default function MapView() {
         </button>
         {search.status === "loading" && <p role="status">Đang tính điểm gặp…</p>}
         {search.status === "error" && <p className="origin-error" role="alert">{search.message}</p>}
-        {search.status === "result" && <MeetingResults outcome={search.outcome} stale={search.stale} />}
+        {visibleSnaps && <SnapDetails snaps={visibleSnaps} />}
+        {search.status === "result" && (
+          <MeetingResults outcome={search.outcome} stale={search.stale}
+            selectedRank={selectedMeeting?.rank ?? null} onSelect={setSelectedMeetingRank}
+            hiddenRoutes={hiddenRoutes} onToggleRoute={toggleRoute} />
+        )}
       </section>
     </div>
   );

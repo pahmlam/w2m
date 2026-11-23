@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import type { Map, Marker } from "maplibre-gl";
 
 import type { Location } from "@/types/meeting";
+import { ORIGIN_COLORS } from "@/utils/meetingDisplay";
 import type { OriginId } from "@/utils/originLocation";
 
 interface Props {
@@ -26,7 +27,7 @@ export default function OriginMarker({ map, MarkerClass, id, location, selected,
   useEffect(() => {
     const element = document.createElement("div");
     element.className = "origin-marker";
-    element.dataset.person = id;
+    element.style.backgroundColor = ORIGIN_COLORS[id];
     element.textContent = id;
     element.setAttribute("role", "img");
     element.setAttribute("aria-label", `Vị trí người ${id}`);

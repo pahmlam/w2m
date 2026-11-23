@@ -21,8 +21,17 @@ h1 { font-size: 2rem; margin: 0; }
 .map-status p { margin: 0; }
 .map-status button { padding: 6px 12px; font: inherit; cursor: pointer; }
 .aoi-key { display: inline-block; width: 16px; border-top: 3px solid #07664d; }
+.snap-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #8a461c;
+  border-radius: 50%;
+  background: #fff;
+}
 
 .meeting-layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(240px, 3fr); gap: 20px; }
+.meeting-map { position: sticky; top: 16px; align-self: start; }
 .origins {
   align-self: start;
   padding: 18px;
@@ -58,15 +67,33 @@ h1 { font-size: 2rem; margin: 0; }
   font-weight: 600;
 }
 .origins .find-meeting:disabled { background: #e5ece7; color: #52655c; }
-.meeting-results { margin-top: 18px; padding-top: 16px; border-top: 1px solid #bdccc2; }
+.meeting-results, .snap-details { margin-top: 18px; padding-top: 16px; border-top: 1px solid #bdccc2; }
 .meeting-results ol { display: grid; gap: 10px; margin: 0; padding-left: 24px; }
 .meeting-results li span { display: block; font-size: 0.875rem; }
+.meeting-results li + li { border-top: 1px solid #e1e8e3; padding-top: 10px; }
 .meeting-results-stale { color: #52655c; }
+.snap-details dl { display: grid; gap: 8px; margin: 12px 0 0; }
+.snap-details dl div { display: grid; grid-template-columns: 20px 1fr; gap: 8px; }
+.snap-details dt, .person-times dt { font-weight: 600; }
+.snap-details dd, .meeting-results dd { margin: 0; }
+.snap-details dd span { display: block; font-size: 0.875rem; }
+.person-times, .summary-times {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.person-times { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.summary-times { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.route-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; margin: 0 0 12px; }
+.route-options label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.route-options input { min-height: 24px; margin: 0; }
+.route-key { width: 12px; height: 3px; }
+.meeting-result-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 6px; }
+.meeting-result-actions button { min-height: 36px; padding: 4px 8px; }
+.meeting-result-actions button[aria-pressed="true"] { background: #17332c; color: #fff; }
 
-.origin-marker[data-person="A"] { background: #075e46; }
-.origin-marker[data-person="B"] { background: #18558c; }
-.origin-marker[data-person="C"] { background: #943a21; }
-.origin-marker[data-person="D"] { background: #634389; }
 .origin-marker {
   display: grid;
   place-items: center;
@@ -81,9 +108,25 @@ h1 { font-size: 2rem; margin: 0; }
 }
 .origin-marker:active { cursor: grabbing; }
 .origin-marker--selected { z-index: 1; outline: 2px solid #17332c; }
+.meeting-marker {
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  background: #23334b;
+  color: #fff;
+  box-shadow: 0 1px 4px #23334b80;
+  font: 700 0.9rem system-ui, sans-serif;
+  cursor: pointer;
+}
+.meeting-marker[aria-pressed="true"] { z-index: 3; background: #fff; border-color: #23334b; color: #23334b; }
+.meeting-marker:focus-visible { outline: 2px solid #07664d; outline-offset: 2px; }
 
 @media (max-width: 720px) {
   main { padding: 16px; }
   .meeting-layout { grid-template-columns: minmax(0, 1fr); }
+  .meeting-map { position: static; }
   .map { height: max(320px, 50dvh); }
 }
