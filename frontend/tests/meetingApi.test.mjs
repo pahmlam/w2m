@@ -34,6 +34,16 @@ test("POSTs all four origins without overriding backend defaults and preserves A
   });
 });
 
+test("POSTs selected fairness and travel limit without overriding other defaults", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () =>
+    Response.json({ status: "success", origins: snaps, results: [first] }));
+  const optimization = { phi: 0.8, max_travel_seconds: 915 };
+  await findMeetingPoints(origins, new AbortController().signal, optimization);
+  assert.deepEqual(JSON.parse(fetch.mock.calls[0].arguments[1].body), {
+    origins, travel_mode: "car", optimization,
+  });
+});
+
 test("reads exact and lower-bound time hints for an empty result", async (t) => {
   const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({
     status: "empty", origins: snaps, results: [], min_required_seconds: "> 3600",

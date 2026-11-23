@@ -4,14 +4,16 @@ import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "rea
 import type { Map, MapMouseEvent, Marker, StyleSpecification } from "maplibre-gl";
 
 import MeetingMarkers from "@/components/MeetingMarkers";
+import MeetingOptions from "@/components/MeetingOptions";
 import MeetingResults from "@/components/MeetingResults";
 import OriginMarker from "@/components/OriginMarker";
 import RouteLayer from "@/components/RouteLayer";
 import SnapDetails from "@/components/SnapDetails";
 import SnapLayer from "@/components/SnapLayer";
-import { findMeetingPoints, loadMapAoi, type MeetingOutcome } from "@/services/meetingApi";
-import type { Location, Polygon } from "@/types/meeting";
+import { findMeetingPoints, loadMapConfig, type MeetingMapConfig, type MeetingOutcome } from "@/services/meetingApi";
+import type { Location } from "@/types/meeting";
 import { coordinateBounds } from "@/utils/meetingDisplay";
+import { parseTravelLimit } from "@/utils/meetingOptions";
 import { ORIGIN_IDS, parseOriginCoordinate, validateOriginLocation, type OriginId } from "@/utils/originLocation";
 
 const OSM_ATTRIBUTION = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';
@@ -31,7 +33,7 @@ const RASTER_STYLE: StyleSpecification = {
 type Coverage =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; aoi: Polygon };
+  | { status: "ready"; config: MeetingMapConfig };
 
 type MeetingSearch =
   | { status: "idle" | "loading" }
@@ -52,6 +54,8 @@ export default function MapView() {
   const [search, setSearch] = useState<MeetingSearch>({ status: "idle" });
   const [selectedMeetingRank, setSelectedMeetingRank] = useState<number | null>(null);
   const [hiddenRoutes, setHiddenRoutes] = useState<ReadonlySet<OriginId>>(() => new Set());
+  const [changedPhi, setChangedPhi] = useState<number>();
+  const [changedTime, setChangedTime] = useState<string>();
   const visibleSnaps = search.status === "result" && !search.stale ? search.outcome.snaps : null;
   const visibleMeetings = search.status === "result" && !search.stale && search.outcome.status === "success"
     ? search.outcome.results : null;
@@ -60,22 +64,31 @@ export default function MapView() {
   const location = locations[selected];
   const fields = draft ?? { lat: location?.lat.toString() ?? "", lon: location?.lon.toString() ?? "" };
   const placedCount = Object.keys(locations).length;
-  const canFindMeeting = placedCount === ORIGIN_IDS.length && coverage.status === "ready" && draft === null;
+  const config = coverage.status === "ready" ? coverage.config : null;
+  const phi = changedPhi ?? config?.defaults.phi ?? null;
+  const timeInput = changedTime ?? config?.defaults.max_travel_seconds.toString() ?? "";
+  const timeSeconds = config ? parseTravelLimit(timeInput, config.limits.max_travel_seconds) : null;
+  const canFindMeeting = placedCount === ORIGIN_IDS.length && draft === null && config !== null
+    && phi !== null && timeSeconds !== null;
+
+  function invalidateSearch() {
+    pendingMeeting.current?.abort();
+    pendingMeeting.current = null;
+    setSearch((current) => current.status === "result"
+      ? { ...current, stale: true }
+      : { status: "idle" });
+  }
 
   function saveLocation(id: OriginId, position: Location): boolean {
-    if (coverage.status !== "ready") return false;
-    const error = validateOriginLocation(position, coverage.aoi);
+    if (!config) return false;
+    const error = validateOriginLocation(position, config.aoi);
     if (error) {
       setOriginError(`Người ${id} · ${error}`);
       return false;
     }
     const previous = locations[id];
     if (previous?.lat !== position.lat || previous.lon !== position.lon) {
-      pendingMeeting.current?.abort();
-      pendingMeeting.current = null;
-      setSearch((current) => current.status === "result"
-        ? { ...current, stale: true }
-        : { status: "idle" });
+      invalidateSearch();
       setLocations((current) => ({ ...current, [id]: position }));
     }
     if (id === selected) setDraft(null);
@@ -102,8 +115,8 @@ export default function MapView() {
   });
 
   async function calculateMeeting() {
-    if (!canFindMeeting || coverage.status !== "ready" || pendingMeeting.current) return;
-    const { aoi } = coverage;
+    if (!canFindMeeting || !config || phi === null || timeSeconds === null || pendingMeeting.current) return;
+    const { aoi } = config;
     const origins = ORIGIN_IDS.flatMap((id) => {
       const position = locations[id];
       return position && !validateOriginLocation(position, aoi) ? [{ id, ...position }] : [];
@@ -116,7 +129,9 @@ export default function MapView() {
     setHiddenRoutes(new Set());
     setSearch({ status: "loading" });
     try {
-      const outcome = await findMeetingPoints(origins, request.signal);
+      const outcome = await findMeetingPoints(origins, request.signal, {
+        phi, max_travel_seconds: timeSeconds,
+      });
       if (!request.signal.aborted) setSearch({ status: "result", outcome, stale: false });
     } catch (error) {
       if (!request.signal.aborted) {
@@ -172,9 +187,9 @@ export default function MapView() {
 
   useEffect(() => {
     const controller = new AbortController();
-    loadMapAoi(controller.signal).then(
-      (aoi) => {
-        if (!controller.signal.aborted) setCoverage({ status: "ready", aoi });
+    loadMapConfig(controller.signal).then(
+      (config) => {
+        if (!controller.signal.aborted) setCoverage({ status: "ready", config });
       },
       (error: unknown) => {
         if (controller.signal.aborted) return;
@@ -191,7 +206,7 @@ export default function MapView() {
 
   useEffect(() => {
     if (!map || coverage.status !== "ready") return;
-    const { aoi } = coverage;
+    const { aoi } = coverage.config;
     map.addSource("w2m-aoi", {
       type: "geojson",
       data: { type: "Feature", properties: {}, geometry: aoi },
@@ -284,6 +299,18 @@ export default function MapView() {
           </fieldset>
           {originError && <p className="origin-error" role="alert">{originError}</p>}
         </form>
+        {config && phi !== null && (
+          <MeetingOptions limits={config.limits} phi={phi} timeInput={timeInput} validTime={timeSeconds !== null}
+            onPhiChange={(value) => {
+              if (value === phi) return;
+              setChangedPhi(value);
+              invalidateSearch();
+            }}
+            onTimeChange={(value) => {
+              setChangedTime(value);
+              invalidateSearch();
+            }} />
+        )}
         {placedCount === ORIGIN_IDS.length && draft && <p>Lưu tọa độ đang sửa trước khi tìm điểm gặp.</p>}
         <button className="find-meeting" type="button" disabled={!canFindMeeting || search.status === "loading"}
           onClick={calculateMeeting}>

@@ -59,6 +59,24 @@ h1 { font-size: 2rem; margin: 0; }
 .origin-form label { display: grid; gap: 4px; }
 .origin-form input { min-width: 0; width: 100%; padding: 6px 10px; }
 .origin-error { color: #a12424; }
+.meeting-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  margin: 16px 0 0;
+  min-width: 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid #bdccc2;
+}
+.meeting-options legend { padding: 0 8px 0 0; font-weight: 600; }
+.meeting-options input, .meeting-options small, .meeting-options label[for="meeting-time"],
+.fairness-endpoints { grid-column: 1 / -1; }
+.meeting-options input { width: 100%; margin: 0; accent-color: #07664d; }
+.meeting-options input[type="range"] { min-height: 24px; }
+.meeting-options input[type="number"] { padding: 6px 10px; }
+.fairness-endpoints { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 0.8rem; }
+.fairness-endpoints span:last-child { text-align: right; }
 .origins .find-meeting {
   width: 100%;
   margin-top: 16px;

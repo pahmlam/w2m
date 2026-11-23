@@ -14,7 +14,7 @@ export default function MeetingResults({ outcome, stale, selectedRank, onSelect,
     <section className="meeting-results" aria-labelledby="meeting-results-heading">
       <h2 id="meeting-results-heading">Kết quả điểm gặp</h2>
       <p role="status">
-        {stale ? "Chưa cập nhật. Hãy tìm lại với các vị trí mới."
+        {stale ? "Chưa cập nhật. Hãy bấm Tìm điểm gặp để tính lại."
           : outcome.status === "success" ? `Tìm thấy ${outcome.results.length} điểm gặp.`
           : "Không có điểm gặp trong giới hạn thời gian."}
       </p>
@@ -69,7 +69,7 @@ export default function MeetingResults({ outcome, stale, selectedRank, onSelect,
               <>Cần {outcome.minimum.lowerBound ? "hơn " : "ít nhất "}
                 {formatMinutes(outcome.minimum.seconds)} phút mỗi người.{" "}</>
             )}
-            Hãy thử điều chỉnh vị trí xuất phát.
+            Hãy thử tăng giới hạn thời gian hoặc điều chỉnh vị trí xuất phát.
           </p>
         )}
       </div>

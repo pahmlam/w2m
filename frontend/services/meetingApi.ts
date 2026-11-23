@@ -1,8 +1,16 @@
-import type { Location, MeetingRequest, MeetingResult, Origin, Polygon, Route, SnappedOrigin } from "../types/meeting";
+import type {
+  Location, MapConfig, MeetingRequest, MeetingResult, Optimization, Origin, ParameterRange, Route, SnappedOrigin,
+} from "../types/meeting";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 
 export type OriginSnap = SnappedOrigin & { input: Location };
+
+export type SearchOptions = Pick<Optimization, "phi" | "max_travel_seconds">;
+export type MeetingMapConfig = Pick<MapConfig, "aoi"> & {
+  defaults: SearchOptions;
+  limits: Pick<MapConfig["limits"], keyof SearchOptions>;
+};
 
 export type DisplayedResult = Pick<MeetingResult,
   "rank" | "location" | "score" | "travel_times" | "min_time" | "max_time" | "difference" | "avg_time"> & {
@@ -54,7 +62,12 @@ function isRing(value: unknown): value is [number, number][] {
   return firstLon === lastLon && firstLat === lastLat;
 }
 
-export async function loadMapAoi(signal: AbortSignal): Promise<Polygon> {
+function isRange(value: unknown): value is ParameterRange {
+  return isObject(value) && isNonnegativeNumber(value.min) && isNonnegativeNumber(value.max)
+    && value.min <= value.max;
+}
+
+export async function loadMapConfig(signal: AbortSignal): Promise<MeetingMapConfig> {
   const response = await fetch(`${API_BASE_URL}/api/v1/map/config`, {
     cache: "no-store",
     signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
@@ -65,12 +78,30 @@ export async function loadMapAoi(signal: AbortSignal): Promise<Polygon> {
   if (!response.ok) throw new Error("Không tải được phạm vi hỗ trợ từ backend.");
 
   const config: unknown = await response.json();
-  const aoi = isObject(config) ? config.aoi : null;
+  if (!isObject(config)) throw new Error("Backend trả về cấu hình bản đồ không hợp lệ.");
+  const { aoi, limits, defaults } = config;
   if (!isObject(aoi) || aoi.type !== "Polygon" || !Array.isArray(aoi.coordinates)
     || aoi.coordinates.length === 0 || !aoi.coordinates.every(isRing)) {
     throw new Error("Backend trả về phạm vi hỗ trợ không hợp lệ.");
   }
-  return { type: aoi.type, coordinates: aoi.coordinates };
+  if (!isObject(limits) || !isObject(defaults)) {
+    throw new Error("Backend trả về cấu hình tìm điểm gặp không hợp lệ.");
+  }
+  const phiRange = limits.phi;
+  const timeRange = limits.max_travel_seconds;
+  const { phi, max_travel_seconds } = defaults;
+  if (!isRange(phiRange) || phiRange.max > 1 || !isRange(timeRange) || !Number.isInteger(timeRange.min)
+    || !Number.isInteger(timeRange.max)
+    || !isNonnegativeNumber(phi) || phi < phiRange.min || phi > phiRange.max
+    || !isNonnegativeNumber(max_travel_seconds) || !Number.isInteger(max_travel_seconds)
+    || max_travel_seconds < timeRange.min || max_travel_seconds > timeRange.max) {
+    throw new Error("Backend trả về cấu hình tìm điểm gặp không hợp lệ.");
+  }
+  return {
+    aoi: { type: aoi.type, coordinates: aoi.coordinates },
+    defaults: { phi, max_travel_seconds },
+    limits: { phi: phiRange, max_travel_seconds: timeRange },
+  };
 }
 
 function parseSnaps(value: unknown, origins: Origin[]): OriginSnap[] {
@@ -133,8 +164,10 @@ function parseOutcome(payload: unknown, origins: Origin[]): MeetingOutcome {
   return { status: "success", snaps, results };
 }
 
-export async function findMeetingPoints(origins: Origin[], signal: AbortSignal): Promise<MeetingOutcome> {
-  const body: MeetingRequest = { origins, travel_mode: "car" };
+export async function findMeetingPoints(
+  origins: Origin[], signal: AbortSignal, optimization?: SearchOptions,
+): Promise<MeetingOutcome> {
+  const body: MeetingRequest = { origins, travel_mode: "car", optimization };
   const timeout = AbortSignal.timeout(30_000);
   const requestSignal = AbortSignal.any([signal, timeout]);
   try {
@@ -156,8 +189,9 @@ export async function findMeetingPoints(origins: Origin[], signal: AbortSignal):
         case "OUT_OF_COVERAGE":
           throw new Error("Có vị trí ngoài phạm vi hỗ trợ. Hãy chỉnh vị trí rồi thử lại.");
         case "INVALID_COORDINATES":
-        case "INVALID_PARAMETERS":
           throw new Error("Thông tin vị trí không hợp lệ. Hãy kiểm tra lại tọa độ A–D.");
+        case "INVALID_PARAMETERS":
+          throw new Error("Tham số tìm điểm gặp không hợp lệ. Hãy kiểm tra mức công bằng và giới hạn thời gian.");
         default:
           throw new Error("Backend không tính được điểm gặp. Hãy thử lại.");
       }
