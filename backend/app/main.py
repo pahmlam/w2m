@@ -17,6 +17,7 @@ from app.models.responses import ErrorResponse
 from app.services.coordinate_snapper import CoordinateSnapper
 from app.services.csr_meeting_service import CSRMeetingService
 from app.services.graph_loader import load_csr_graph
+from app.services.meeting_routing_cache import MeetingRoutingCache
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,9 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        cache = MeetingRoutingCache(ttl_seconds=settings.cache_ttl_seconds,
+                                    max_bytes=settings.cache_max_bytes)
+        app.state.meeting_routing_cache = cache
         app.state.csr_graph = None
         app.state.csr_meeting_service = None
         service = None
@@ -41,12 +45,14 @@ def create_app() -> FastAPI:
         try:
             yield
         finally:
+            cache.clear()
             app.state.csr_graph = None
             app.state.csr_meeting_service = None
             if service is not None:
                 await service.close()
 
     app = FastAPI(title="W2M API", version="0.2.0", lifespan=lifespan)
+    app.state.settings = settings
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST"], allow_headers=["Content-Type"],

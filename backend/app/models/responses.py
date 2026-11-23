@@ -87,8 +87,8 @@ class Polygon(ContractModel):
 
 
 class ParameterRange(ContractModel):
-    min: float
-    max: float
+    min: int | float
+    max: int | float
 
 
 class ParameterLimits(ContractModel):

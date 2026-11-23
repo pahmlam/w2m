@@ -204,6 +204,23 @@ def test_csr_ranking_requires_candidate_flag_and_common_reachability(csr_bundle:
     assert rank_candidates(one_limited, phi=0.5, max_travel_seconds=31).candidates == ()
 
 
+def test_csr_reranking_matches_dijkstra_at_a_reduced_cutoff(csr_bundle: Path) -> None:
+    graph = load_csr_graph(csr_bundle)
+    matrix = graph.csr
+    weights = matrix.data.copy()
+    weights[0] = np.nextafter(200.0, np.inf)
+    assert 100.0 + weights[0] == 300.0
+    graph = replace(graph, _csr=(weights, matrix.indices, matrix.indptr))
+    snap = replace(_two_way_snap(), theta=0, source_node_id=-3,
+                   snapped_xy=(500000, 2300000), access_seconds=100)
+    cached = route_csr_origins(graph, (snap,), 900)
+    fresh = route_csr_origins(graph, (snap,), 300)
+
+    assert rank_candidates(cached, phi=0.5, max_travel_seconds=900).candidates
+    assert rank_candidates(fresh, phi=0.5, max_travel_seconds=300).candidates == ()
+    assert rank_candidates(cached, phi=0.5, max_travel_seconds=300).candidates == ()
+
+
 def test_csr_reranking_filters_raw_cutoff_and_preserves_pareto_ties(
     csr_bundle: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

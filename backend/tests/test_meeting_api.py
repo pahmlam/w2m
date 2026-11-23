@@ -1,6 +1,7 @@
-"""Exercise the fresh meeting-points endpoint with a real offline CSR fixture."""
+"""Exercise fresh and cached meeting-points requests on an offline CSR fixture."""
 
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from test_csr_graph_loader import csr_bundle as csr_bundle
 
 from app.config.settings import Settings
 from app.main import create_app
+from app.models.requests import Optimization
 
 MEETING_URL = "/api/v1/meeting-points"
 ORIGIN_IDS = ("visitor-1", "visitor-2", "visitor-3", "visitor-4")
@@ -24,6 +26,59 @@ def meeting_client(csr_bundle: Path, monkeypatch: pytest.MonkeyPatch) -> Iterato
     monkeypatch.setattr("app.models.requests.get_settings", lambda: settings)
     with TestClient(create_app()) as client:
         yield client
+
+
+def test_map_config_returns_bundle_aoi_and_runtime_parameters(
+    csr_bundle: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None, graph_dir=csr_bundle, default_phi=0.8,
+        default_max_travel_seconds=1200, default_top_k=2,
+        default_min_spacing_meters=725, access_speed_mps=2,
+    )
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    monkeypatch.setattr("app.models.requests.get_settings", lambda: settings)
+
+    with TestClient(create_app()) as client:
+        response = client.get("/api/v1/map/config")
+        assert response.status_code == 200
+        config = response.json()
+        assert config["aoi"] == {"type": "Polygon", "coordinates": [[
+            [106, 20], [106, 22], [104, 22], [104, 20], [106, 20],
+        ]]}
+        assert config["travel_modes"] == ["car"]
+        assert config["graph_version"] == "fixture-v1"
+        assert config["weight_profile_version"] == "car-v1"
+        assert config["source_date"] == "2026-11-06"
+        assert config["limits"] == {
+            "phi": {"min": 0, "max": 1},
+            "max_travel_seconds": {"min": 300, "max": 7200},
+            "top_k": {"min": 1, "max": 5},
+            "min_spacing_meters": {"min": 0, "max": 5000},
+        }
+        for boundary in ("min", "max"):
+            Optimization.model_validate({name: limits[boundary]
+                                         for name, limits in config["limits"].items()})
+
+        defaults = config["defaults"]
+        assert defaults == {
+            "phi": 0.8, "max_travel_seconds": 1200, "top_k": 2,
+            "min_spacing_meters": 725, "v_access": 2,
+        }
+        optimization = {name: defaults[name] for name in config["limits"]}
+        assert Optimization().model_dump() == optimization
+        lon, lat = TO_WGS84.transform(500004, 2299996)
+        meeting = client.post(MEETING_URL, json={"origins": [
+            {"id": origin_id, "lon": lon, "lat": lat} for origin_id in ORIGIN_IDS
+        ]})
+        assert meeting.status_code == 200
+        result = meeting.json()
+        assert result["objective"]["phi"] == defaults["phi"]
+        assert result["origins"][0]["access_seconds"] == 2
+        rerank = client.post(f"{MEETING_URL}/{result['request_id']}/rerank",
+                             json={"optimization": optimization})
+        assert rerank.status_code == 200
+        assert rerank.json()["results"] == result["results"]
 
 
 def test_create_meeting_points_returns_snaps_and_matched_routes(meeting_client: TestClient) -> None:
@@ -85,6 +140,114 @@ def test_create_meeting_points_returns_cutoff_bound_when_empty(meeting_client: T
     assert body["results"] == []
     assert len(body["origins"]) == 4
     assert body["min_required_seconds"] == "> 300"
+    assert meeting_client.portal is not None
+    routing = meeting_client.portal.call(
+        meeting_client.app.state.meeting_routing_cache.get, body["request_id"],
+    )
+    assert routing is not None
+    assert all(source.reachable_node_count == 0 for source in routing.sources)
+
+
+def test_rerank_reuses_tables_and_matches_a_fresh_request(
+    meeting_client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {"origins": [
+        {"id": origin_id, "lon": lon, "lat": lat}
+        for origin_id, (lon, lat) in zip(ORIGIN_IDS, (
+            TO_WGS84.transform(500004, 2300000 - offset) for offset in (1, 2, 1, 1)
+        ), strict=True)
+    ]}
+    response = meeting_client.post(MEETING_URL, json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    cache = meeting_client.app.state.meeting_routing_cache
+    assert meeting_client.portal is not None
+    assert meeting_client.portal.call(cache.get, response.headers["X-Request-ID"]) is None
+    routing = meeting_client.portal.call(cache.get, body["request_id"])
+    assert routing is not None
+    assert routing.graph.graph_version == body["graph_version"]
+    assert routing.graph.weight_profile_version == body["weight_profile_version"]
+    first, second, *_ = routing.sources
+    assert first.snap.snapped_xy == pytest.approx(second.snap.snapped_xy)
+    assert (first.snap.access_seconds, second.snap.access_seconds) == pytest.approx((10, 20))
+    assert first.network_cutoff_seconds == pytest.approx(3590)
+    assert all(len(source.distances_seconds) == len(source.predecessors) == 2
+               for source in routing.sources)
+
+    optimization = {"phi": 0, "max_travel_seconds": 300, "top_k": 1, "min_spacing_meters": 0}
+    fresh = meeting_client.post(MEETING_URL, json={**payload, "optimization": optimization})
+    assert fresh.status_code == 200
+
+    def unexpected_routing(*args: object) -> None:
+        pytest.fail("Rerank must reuse the cached snaps and paths")
+
+    monkeypatch.setattr("app.services.csr_meeting_service.route_csr_origins", unexpected_routing)
+    monkeypatch.setattr("app.services.csr_shortest_path.dijkstra", unexpected_routing)
+    monkeypatch.setattr("app.services.coordinate_snapper.CoordinateSnapper.snap_origins",
+                        unexpected_routing)
+    url = f"{MEETING_URL}/{body['request_id']}/rerank"
+    reranked = meeting_client.post(url, json={"optimization": optimization})
+    assert reranked.status_code == 200
+    updated = reranked.json()
+    assert updated["request_id"] == body["request_id"]
+    assert updated["timings_ms"]["snap"] == updated["timings_ms"]["dijkstra"] == 0
+    for field in ("results", "objective", "origins", "graph_version", "weight_profile_version"):
+        assert updated[field] == fresh.json()[field]
+    assert updated["results"][0]["score"] == 16.5
+    assert updated["results"][0]["score"] != body["results"][0]["score"]
+
+    restored = meeting_client.post(url, json={"optimization": {}})
+    assert restored.status_code == 200
+    assert restored.json()["objective"] == body["objective"]
+    assert restored.json()["results"] == body["results"]
+
+
+def test_tc14_rerank_requires_recompute_above_original_cutoff(meeting_client: TestClient) -> None:
+    lon, lat = TO_WGS84.transform(500005, 2299900)
+    origins = [{"id": origin_id, "lon": lon, "lat": lat} for origin_id in ORIGIN_IDS]
+    short_options = {"max_travel_seconds": 900}
+    long_options = {"max_travel_seconds": 1800}
+    short = meeting_client.post(
+        MEETING_URL, json={"origins": origins, "optimization": short_options},
+    )
+    assert short.status_code == 200
+    assert short.json()["status"] == "empty"
+    rejected = meeting_client.post(f"{MEETING_URL}/{short.json()['request_id']}/rerank",
+                                   json={"optimization": long_options})
+    assert rejected.status_code == 409
+    assert rejected.json()["error_code"] == "RECOMPUTE_REQUIRED"
+    assert rejected.json()["request_id"] == rejected.headers["X-Request-ID"]
+
+    long = meeting_client.post(MEETING_URL, json={"origins": origins, "optimization": long_options})
+    assert long.status_code == 200
+    assert long.json()["status"] == "success"
+    url = f"{MEETING_URL}/{long.json()['request_id']}/rerank"
+    for options, expected in ((short_options, short.json()), (long_options, long.json())):
+        reranked = meeting_client.post(url, json={"optimization": options})
+        assert reranked.status_code == 200
+        for field in ("status", "error_code", "min_required_seconds", "results", "origins"):
+            assert reranked.json()[field] == expected[field]
+
+
+def test_rerank_conflicts_on_missing_id_or_graph_change(meeting_client: TestClient) -> None:
+    options = {"optimization": {}}
+    missing = meeting_client.post(f"{MEETING_URL}/missing/rerank", json=options)
+    assert missing.status_code == 409
+    assert missing.json()["error_code"] == "RECOMPUTE_REQUIRED"
+
+    lon, lat = TO_WGS84.transform(500004, 2299999)
+    created = meeting_client.post(MEETING_URL, json={"origins": [
+        {"id": origin_id, "lon": lon, "lat": lat} for origin_id in ORIGIN_IDS
+    ]})
+    assert created.status_code == 200
+    state = meeting_client.app.state
+    assert meeting_client.portal is not None
+    meeting_client.portal.call(setattr, state, "csr_graph",
+                               replace(state.csr_graph, graph_version="fixture-v2"))
+    url = f"{MEETING_URL}/{created.json()['request_id']}/rerank"
+    stale = meeting_client.post(url, json=options)
+    assert stale.status_code == 409
+    assert stale.json()["error_code"] == "RECOMPUTE_REQUIRED"
 
 
 @pytest.mark.parametrize(("lon", "lat", "code"), [

@@ -54,9 +54,9 @@ npm --prefix frontend run dev
 |---|---|
 | `GET /health` | 200 khi process chạy |
 | `GET /ready` | 200 khi nạp được CSR, 503 `GRAPH_UNAVAILABLE` nếu bundle thiếu hoặc không hợp lệ |
-| `GET /api/v1/map/config` | 503 `GRAPH_UNAVAILABLE` |
-| `POST /api/v1/meeting-points` | Validate request; đầu vào hợp lệ trả 503 |
-| `POST /api/v1/meeting-points/{request_id}/rerank` | Validate request; đầu vào hợp lệ trả 503 |
+| `GET /api/v1/map/config` | Trả AOI GeoJSON, phiên bản bundle và tham số runtime |
+| `POST /api/v1/meeting-points` | Tính điểm gặp và tuyến bằng CSR |
+| `POST /api/v1/meeting-points/{request_id}/rerank` | Xếp hạng từ bảng đã cache, trả 409 `RECOMPUTE_REQUIRED` nếu cần tính lại |
 
 Đặt `W2M_GRAPH_DIR` trong `.env` trỏ đến thư mục đầu ra `validated` của bundle
 đồ thị offline. Backend nạp CSR ở startup. `W2M_CSR_MAX_CONCURRENT_TASKS` giới hạn
@@ -64,7 +64,7 @@ số tác vụ tính toán CSR chạy cùng lúc trên mỗi process backend, m�
 Service CSR đo từng bước theo mili giây. `scan` gồm lọc và tính điểm OWA.
 `rank` gồm sắp xếp và chọn điểm theo khoảng cách. `total` đo từ khi tác vụ
 bắt đầu chạy đến khi dựng xong kết quả, bao gồm cả bước tạo overlay.
-Các endpoint nghiệp vụ hiện trả 503 sau validation. Lỗi validation trả 400
+Các endpoint nghiệp vụ trả 503 `GRAPH_UNAVAILABLE` khi chưa nạp được đồ thị. Lỗi validation trả 400
 `INVALID_COORDINATES` hoặc `INVALID_PARAMETERS`.
 
 Có thể kiểm tra HTTP bằng:
@@ -236,7 +236,7 @@ smoke test cả ba nhóm. Mỗi lượt chạy cần một đường dẫn báo 
 | Đường dẫn | Trách nhiệm |
 |---|---|
 | `backend/app/main.py` | FastAPI app, CORS, request ID, lỗi, health/readiness |
-| `backend/app/api/meeting.py` | Các endpoint nghiệp vụ đang chờ tích hợp |
+| `backend/app/api/meeting.py` | API điểm gặp, rerank và cấu hình bản đồ |
 | `backend/app/models/` | Validation request và schema response |
 | `backend/app/config/` | Settings, polygon nguồn và bảng tốc độ |
 | `backend/app/services/area.py` | Polygon, kiểm tra biên và buffer |

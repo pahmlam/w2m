@@ -43,6 +43,7 @@ class CSRRoutingResult:
     graph: CSRGraph
     overlay: CSROverlay
     sources: tuple[CSRSourcePaths, ...]
+    max_travel_seconds: float
     dijkstra_ms: float = field(default=0.0, compare=False)
 
 
@@ -72,4 +73,6 @@ def route_csr_origins(
         sources.append(CSRSourcePaths(
             snap, source, cutoff, distances[:node_count], predecessors[:node_count],
         ))
-    return CSRRoutingResult(graph, overlay, tuple(sources), (perf_counter_ns() - started) / 1e6)
+    return CSRRoutingResult(
+        graph, overlay, tuple(sources), max_travel_seconds, (perf_counter_ns() - started) / 1e6,
+    )

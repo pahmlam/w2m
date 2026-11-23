@@ -71,17 +71,26 @@ def rank_candidates[RoutingT: (RoutingResult, CSRRoutingResult)](
                 or routing.weight_profile_version != reference.weight_profile_version):
             raise ValueError("Routing versions do not match the reference")
     access_times = tuple(source.snap.access_seconds for source in sources)
-    for access, source in zip(access_times, sources, strict=True):
+    network_limits = tuple(max_travel_seconds - access for access in access_times)
+    for access, limit, source in zip(access_times, network_limits, sources, strict=True):
         cutoff = source.network_cutoff_seconds
         if not isfinite(access) or access < 0 or not isfinite(cutoff):
             raise ValueError("Invalid source access time or computed cutoff")
-        if max_travel_seconds - access > cutoff:
+        if limit > cutoff:
             raise ValueError("Requested limit exceeds computed routing coverage")
+    reduced_csr_cutoff = (
+        isinstance(routing, CSRRoutingResult) and max_travel_seconds < routing.max_travel_seconds
+    )
     scan_start = perf_counter_ns()
     candidates = []
     for node, network_times in _candidate_network_times(routing):
         if any(value < 0 for value in network_times):
             raise ValueError("Network travel times cannot be negative")
+        # Match the fresh search's network cutoff at floating-point boundaries.
+        if reduced_csr_cutoff and any(
+            value > limit for value, limit in zip(network_times, network_limits, strict=True)
+        ):
+            continue
         raw_times = tuple(access + value
                           for access, value in zip(access_times, network_times, strict=True))
         if any(not isfinite(value) or value > max_travel_seconds for value in raw_times):

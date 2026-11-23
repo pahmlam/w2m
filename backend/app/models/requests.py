@@ -2,7 +2,13 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.config.settings import get_settings
+from app.config.settings import (
+    MAX_TRAVEL_SECONDS_BOUNDS,
+    MIN_SPACING_METERS_BOUNDS,
+    PHI_BOUNDS,
+    TOP_K_BOUNDS,
+    get_settings,
+)
 
 
 class ContractModel(BaseModel):
@@ -19,18 +25,18 @@ class Origin(Location):
 
 
 class Optimization(ContractModel):
-    phi: Annotated[float, Field(ge=0, le=1, strict=True)] = Field(
-        default_factory=lambda: get_settings().default_phi
+    phi: Annotated[float, Field(ge=PHI_BOUNDS[0], le=PHI_BOUNDS[1], strict=True)] = Field(
+        default_factory=lambda: get_settings().default_phi,
     )
-    max_travel_seconds: Annotated[int, Field(ge=300, le=7200, strict=True)] = Field(
-        default_factory=lambda: get_settings().default_max_travel_seconds
+    max_travel_seconds: Annotated[
+        int, Field(ge=MAX_TRAVEL_SECONDS_BOUNDS[0], le=MAX_TRAVEL_SECONDS_BOUNDS[1], strict=True)
+    ] = Field(default_factory=lambda: get_settings().default_max_travel_seconds)
+    top_k: Annotated[int, Field(ge=TOP_K_BOUNDS[0], le=TOP_K_BOUNDS[1], strict=True)] = Field(
+        default_factory=lambda: get_settings().default_top_k,
     )
-    top_k: Annotated[int, Field(ge=1, le=5, strict=True)] = Field(
-        default_factory=lambda: get_settings().default_top_k
-    )
-    min_spacing_meters: Annotated[float, Field(ge=0, le=5000, strict=True)] = Field(
-        default_factory=lambda: get_settings().default_min_spacing_meters
-    )
+    min_spacing_meters: Annotated[
+        float, Field(ge=MIN_SPACING_METERS_BOUNDS[0], le=MIN_SPACING_METERS_BOUNDS[1], strict=True)
+    ] = Field(default_factory=lambda: get_settings().default_min_spacing_meters)
 
 
 class MeetingRequest(ContractModel):

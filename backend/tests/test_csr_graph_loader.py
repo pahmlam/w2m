@@ -123,6 +123,11 @@ def test_startup_only_publishes_validated_graph(
         graph = app.state.csr_graph
         assert client.get("/health").status_code == 200
         assert client.get("/ready").status_code == (503 if corrupt else 200)
+        config = client.get("/api/v1/map/config")
+        assert config.status_code == (503 if corrupt else 200)
+        if corrupt:
+            assert config.json()["error_code"] == "GRAPH_UNAVAILABLE"
+            assert config.json()["request_id"] == config.headers["X-Request-ID"]
         assert (graph is None) == corrupt
         assert app.state.csr_graph is graph
     assert app.state.csr_graph is None

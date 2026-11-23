@@ -8,7 +8,7 @@ from time import perf_counter_ns
 from app.models.requests import MeetingRequest, Optimization
 from app.models.responses import MeetingResult, Timings
 from app.services.coordinate_snapper import CoordinateSnapper, SnapResult
-from app.services.csr_shortest_path import route_csr_origins
+from app.services.csr_shortest_path import CSRRoutingResult, route_csr_origins
 from app.services.graph_loader import CSRGraph
 from app.services.meeting_optimizer import (
     build_selected_meeting_results,
@@ -24,8 +24,13 @@ class CSRMeetingComputation:
     results: list[MeetingResult]
     timings_ms: Timings
     reachable_nodes_by_origin: dict[str, int]
-    snaps: tuple[SnapResult, ...]
+    routing: CSRRoutingResult
     objective_weights: tuple[float, ...]
+
+    @property
+    def snaps(self) -> tuple[SnapResult, ...]:
+        """Expose the snapped origins in request order."""
+        return tuple(source.snap for source in self.routing.sources)
 
 
 class CSRMeetingService:
@@ -56,6 +61,14 @@ class CSRMeetingService:
             self._executor, self._compute_request, request,
         )
 
+    async def rerank(
+        self, routing: CSRRoutingResult, optimization: Optimization,
+    ) -> CSRMeetingComputation:
+        """Rank cached paths and rebuild selected routes in a worker slot."""
+        return await asyncio.get_running_loop().run_in_executor(
+            self._executor, self._rerank, routing, optimization,
+        )
+
     async def close(self) -> None:
         """Cancel jobs that have not started and let running jobs finish off-loop."""
         await asyncio.to_thread(self._executor.shutdown, cancel_futures=True)
@@ -77,12 +90,27 @@ class CSRMeetingService:
         self, snaps: tuple[SnapResult, ...], optimization: Optimization,
         started: int, snap_end: int,
     ) -> CSRMeetingComputation:
-        limit = optimization.max_travel_seconds
-        routing = route_csr_origins(self._graph, snaps, limit)
+        routing = route_csr_origins(self._graph, snaps, optimization.max_travel_seconds)
+        return self._rank_and_build(
+            routing, optimization, started,
+            snap_ms=(snap_end - started) / 1e6, dijkstra_ms=routing.dijkstra_ms,
+        )
+
+    def _rerank(
+        self, routing: CSRRoutingResult, optimization: Optimization,
+    ) -> CSRMeetingComputation:
+        return self._rank_and_build(routing, optimization, perf_counter_ns())
+
+    def _rank_and_build(
+        self, routing: CSRRoutingResult, optimization: Optimization, started: int,
+        *, snap_ms: float = 0.0, dijkstra_ms: float = 0.0,
+    ) -> CSRMeetingComputation:
         reachable_nodes = {
             source.snap.origin_id: source.reachable_node_count for source in routing.sources
         }
-        ranking = rank_candidates(routing, phi=optimization.phi, max_travel_seconds=limit)
+        ranking = rank_candidates(
+            routing, phi=optimization.phi, max_travel_seconds=optimization.max_travel_seconds,
+        )
         selection_start = perf_counter_ns()
         selected = select_candidates(
             ranking, top_k=optimization.top_k, min_spacing_meters=optimization.min_spacing_meters,
@@ -91,11 +119,11 @@ class CSRMeetingService:
         results = build_selected_meeting_results(ranking, selected)
         ended = perf_counter_ns()
         timings = Timings(
-            snap=(snap_end - started) / 1e6,
-            dijkstra=routing.dijkstra_ms,
+            snap=snap_ms,
+            dijkstra=dijkstra_ms,
             scan=ranking.scan_ms,
             rank=ranking.rank_ms + (routes_start - selection_start) / 1e6,
             routes=(ended - routes_start) / 1e6,
             total=(ended - started) / 1e6,
         )
-        return CSRMeetingComputation(results, timings, reachable_nodes, snaps, ranking.weights)
+        return CSRMeetingComputation(results, timings, reachable_nodes, routing, ranking.weights)
