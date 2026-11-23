@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
 import type { Map, MapMouseEvent, Marker, StyleSpecification } from "maplibre-gl";
 
 import MeetingMarkers from "@/components/MeetingMarkers";
@@ -10,13 +10,16 @@ import OriginMarker from "@/components/OriginMarker";
 import RouteLayer from "@/components/RouteLayer";
 import SnapDetails from "@/components/SnapDetails";
 import SnapLayer from "@/components/SnapLayer";
-import { findMeetingPoints, loadMapConfig, type MeetingMapConfig, type MeetingOutcome } from "@/services/meetingApi";
-import type { Location } from "@/types/meeting";
+import {
+  findMeetingPoints, loadMapConfig, rerankMeetingPoints, type MeetingMapConfig, type MeetingOutcome,
+} from "@/services/meetingApi";
+import type { Location, Optimization } from "@/types/meeting";
 import { coordinateBounds } from "@/utils/meetingDisplay";
 import { parseTravelLimit } from "@/utils/meetingOptions";
 import { ORIGIN_IDS, parseOriginCoordinate, validateOriginLocation, type OriginId } from "@/utils/originLocation";
 
 const OSM_ATTRIBUTION = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';
+const RERANK_DEBOUNCE_MS = 250;
 const RASTER_STYLE: StyleSpecification = {
   version: 8,
   sources: {
@@ -36,13 +39,16 @@ type Coverage =
   | { status: "ready"; config: MeetingMapConfig };
 
 type MeetingSearch =
-  | { status: "idle" | "loading" }
+  | { status: "idle" }
+  | { status: "loading"; reranking: boolean }
   | { status: "error"; message: string }
   | { status: "result"; outcome: MeetingOutcome; stale: boolean };
 
 export default function MapView() {
   const container = useRef<HTMLDivElement>(null);
   const pendingMeeting = useRef<AbortController>(null);
+  const queuedRerank = useRef<number>(null);
+  const cachedRequestId = useRef<string>(null);
   const [mapRuntime, setMapRuntime] = useState<{ map: Map; MarkerClass: typeof Marker }>();
   const [mapError, setMapError] = useState("");
   const [coverage, setCoverage] = useState<Coverage>({ status: "loading" });
@@ -52,14 +58,17 @@ export default function MapView() {
   const [draft, setDraft] = useState<{ lat: string; lon: string } | null>(null);
   const [originError, setOriginError] = useState("");
   const [search, setSearch] = useState<MeetingSearch>({ status: "idle" });
-  const [selectedMeetingRank, setSelectedMeetingRank] = useState<number | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [hiddenRoutes, setHiddenRoutes] = useState<ReadonlySet<OriginId>>(() => new Set());
   const [changedPhi, setChangedPhi] = useState<number>();
   const [changedTime, setChangedTime] = useState<string>();
   const visibleSnaps = search.status === "result" && !search.stale ? search.outcome.snaps : null;
   const visibleMeetings = search.status === "result" && !search.stale && search.outcome.status === "success"
     ? search.outcome.results : null;
-  const selectedMeeting = visibleMeetings?.find(({ rank }) => rank === selectedMeetingRank);
+  const selectedMeeting = visibleMeetings?.find(({ node_id }) => node_id === selectedNodeId);
+  const selectMeeting = useCallback((rank: number) => {
+    setSelectedNodeId(visibleMeetings?.find((meeting) => meeting.rank === rank)?.node_id ?? null);
+  }, [visibleMeetings]);
   const map = mapRuntime?.map;
   const location = locations[selected];
   const fields = draft ?? { lat: location?.lat.toString() ?? "", lon: location?.lon.toString() ?? "" };
@@ -71,7 +80,13 @@ export default function MapView() {
   const canFindMeeting = placedCount === ORIGIN_IDS.length && draft === null && config !== null
     && phi !== null && timeSeconds !== null;
 
+  function cancelQueuedRerank() {
+    if (queuedRerank.current !== null) window.clearTimeout(queuedRerank.current);
+    queuedRerank.current = null;
+  }
+
   function invalidateSearch() {
+    cancelQueuedRerank();
     pendingMeeting.current?.abort();
     pendingMeeting.current = null;
     setSearch((current) => current.status === "result"
@@ -88,6 +103,7 @@ export default function MapView() {
     }
     const previous = locations[id];
     if (previous?.lat !== position.lat || previous.lon !== position.lon) {
+      cachedRequestId.current = null;
       invalidateSearch();
       setLocations((current) => ({ ...current, [id]: position }));
     }
@@ -114,8 +130,8 @@ export default function MapView() {
     saveLocation(selected, { lat, lon: lng });
   });
 
-  async function calculateMeeting() {
-    if (!canFindMeeting || !config || phi === null || timeSeconds === null || pendingMeeting.current) return;
+  async function calculateMeeting(optimization: Optimization, requestId?: string) {
+    if (!config || draft !== null || pendingMeeting.current) return;
     const { aoi } = config;
     const origins = ORIGIN_IDS.flatMap((id) => {
       const position = locations[id];
@@ -125,14 +141,19 @@ export default function MapView() {
 
     const request = new AbortController();
     pendingMeeting.current = request;
-    setSelectedMeetingRank(null);
-    setHiddenRoutes(new Set());
-    setSearch({ status: "loading" });
+    if (!requestId) {
+      setSelectedNodeId(null);
+      setHiddenRoutes(new Set());
+    }
+    setSearch({ status: "loading", reranking: requestId !== undefined });
     try {
-      const outcome = await findMeetingPoints(origins, request.signal, {
-        phi, max_travel_seconds: timeSeconds,
-      });
-      if (!request.signal.aborted) setSearch({ status: "result", outcome, stale: false });
+      const outcome = requestId
+        ? await rerankMeetingPoints(requestId, origins, optimization, request.signal)
+        : await findMeetingPoints(origins, request.signal, optimization);
+      if (!request.signal.aborted) {
+        cachedRequestId.current = outcome.requestId;
+        setSearch({ status: "result", outcome, stale: false });
+      }
     } catch (error) {
       if (!request.signal.aborted) {
         setSearch({
@@ -145,6 +166,19 @@ export default function MapView() {
     }
   }
 
+  function scheduleRerank(nextPhi: number, nextTimeInput: string) {
+    invalidateSearch();
+    const requestId = cachedRequestId.current;
+    if (!config || !requestId || draft !== null) return;
+    const seconds = parseTravelLimit(nextTimeInput, config.limits.max_travel_seconds);
+    if (seconds === null) return;
+    const optimization = { ...config.defaults, phi: nextPhi, max_travel_seconds: seconds };
+    queuedRerank.current = window.setTimeout(() => {
+      queuedRerank.current = null;
+      void calculateMeeting(optimization, requestId);
+    }, RERANK_DEBOUNCE_MS);
+  }
+
   function toggleRoute(id: OriginId) {
     setHiddenRoutes((current) => {
       const next = new Set(current);
@@ -153,7 +187,10 @@ export default function MapView() {
     });
   }
 
-  useEffect(() => () => pendingMeeting.current?.abort(), []);
+  useEffect(() => () => {
+    if (queuedRerank.current !== null) window.clearTimeout(queuedRerank.current);
+    pendingMeeting.current?.abort();
+  }, []);
 
   useEffect(() => {
     const element = container.current;
@@ -240,7 +277,7 @@ export default function MapView() {
         })}
         {mapRuntime && visibleMeetings && (
           <MeetingMarkers map={mapRuntime.map} MarkerClass={mapRuntime.MarkerClass} results={visibleMeetings}
-            selectedRank={selectedMeeting?.rank ?? null} onSelect={setSelectedMeetingRank} />
+            selectedRank={selectedMeeting?.rank ?? null} onSelect={selectMeeting} />
         )}
         <div className="map-status">
           <p role="status">
@@ -288,12 +325,18 @@ export default function MapView() {
             <label>
               Vĩ độ
               <input type="text" inputMode="decimal" value={fields.lat}
-                onChange={(event) => setDraft({ ...fields, lat: event.target.value })} />
+                onChange={(event) => {
+                  cancelQueuedRerank();
+                  setDraft({ ...fields, lat: event.target.value });
+                }} />
             </label>
             <label>
               Kinh độ
               <input type="text" inputMode="decimal" value={fields.lon}
-                onChange={(event) => setDraft({ ...fields, lon: event.target.value })} />
+                onChange={(event) => {
+                  cancelQueuedRerank();
+                  setDraft({ ...fields, lon: event.target.value });
+                }} />
             </label>
             <button type="submit">Lưu vị trí</button>
           </fieldset>
@@ -304,24 +347,30 @@ export default function MapView() {
             onPhiChange={(value) => {
               if (value === phi) return;
               setChangedPhi(value);
-              invalidateSearch();
+              scheduleRerank(value, timeInput);
             }}
             onTimeChange={(value) => {
               setChangedTime(value);
-              invalidateSearch();
+              scheduleRerank(phi, value);
             }} />
         )}
         {placedCount === ORIGIN_IDS.length && draft && <p>Lưu tọa độ đang sửa trước khi tìm điểm gặp.</p>}
         <button className="find-meeting" type="button" disabled={!canFindMeeting || search.status === "loading"}
-          onClick={calculateMeeting}>
+          onClick={() => {
+            if (!config || phi === null || timeSeconds === null) return;
+            cancelQueuedRerank();
+            void calculateMeeting({ ...config.defaults, phi, max_travel_seconds: timeSeconds });
+          }}>
           {search.status === "error" ? "Thử lại" : "Tìm điểm gặp"}
         </button>
-        {search.status === "loading" && <p role="status">Đang tính điểm gặp…</p>}
+        {search.status === "loading" && <p role="status">
+          {search.reranking ? "Đang cập nhật điểm gặp…" : "Đang tính điểm gặp…"}
+        </p>}
         {search.status === "error" && <p className="origin-error" role="alert">{search.message}</p>}
         {visibleSnaps && <SnapDetails snaps={visibleSnaps} />}
         {search.status === "result" && (
           <MeetingResults outcome={search.outcome} stale={search.stale}
-            selectedRank={selectedMeeting?.rank ?? null} onSelect={setSelectedMeetingRank}
+            selectedRank={selectedMeeting?.rank ?? null} onSelect={selectMeeting}
             hiddenRoutes={hiddenRoutes} onToggleRoute={toggleRoute} />
         )}
       </section>

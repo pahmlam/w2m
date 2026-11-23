@@ -8,7 +8,7 @@ const aoi = {
 };
 const config = {
   aoi,
-  defaults: { phi: 0.57, max_travel_seconds: 3661 },
+  defaults: { phi: 0.57, max_travel_seconds: 3661, top_k: 4, min_spacing_meters: 750 },
   limits: { phi: { min: 0, max: 1 }, max_travel_seconds: { min: 300, max: 7200 } },
 };
 

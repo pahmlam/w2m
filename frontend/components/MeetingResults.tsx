@@ -14,7 +14,7 @@ export default function MeetingResults({ outcome, stale, selectedRank, onSelect,
     <section className="meeting-results" aria-labelledby="meeting-results-heading">
       <h2 id="meeting-results-heading">Kết quả điểm gặp</h2>
       <p role="status">
-        {stale ? "Chưa cập nhật. Hãy bấm Tìm điểm gặp để tính lại."
+        {stale ? "Chưa cập nhật."
           : outcome.status === "success" ? `Tìm thấy ${outcome.results.length} điểm gặp.`
           : "Không có điểm gặp trong giới hạn thời gian."}
       </p>
