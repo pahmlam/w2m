@@ -30,7 +30,7 @@ export default function OriginMarker({ map, MarkerClass, id, location, selected,
     element.style.backgroundColor = ORIGIN_COLORS[id];
     element.textContent = id;
     element.setAttribute("role", "img");
-    element.setAttribute("aria-label", `Vị trí người ${id}`);
+    element.setAttribute("aria-label", `Friend ${id} location`);
     // Keep the drag's release on the map even when the pointer crosses its controls.
     element.addEventListener("pointerdown", (event) => {
       if (event.button === 0) element.setPointerCapture(event.pointerId);

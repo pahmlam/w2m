@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
-import type { Map, MapMouseEvent, Marker, StyleSpecification } from "maplibre-gl";
+import type { Map, MapMouseEvent, Marker } from "maplibre-gl";
 
 import MeetingMarkers from "@/components/MeetingMarkers";
 import MeetingOptions from "@/components/MeetingOptions";
@@ -14,24 +14,18 @@ import {
   findMeetingPoints, loadMapConfig, rerankMeetingPoints, type MeetingMapConfig, type MeetingOutcome,
 } from "@/services/meetingApi";
 import type { Location, Optimization } from "@/types/meeting";
-import { coordinateBounds } from "@/utils/meetingDisplay";
-import { parseTravelLimit } from "@/utils/meetingOptions";
+import { basemapSettings, outsideAoiMask } from "@/utils/basemap";
+import { coordinateBounds, ORIGIN_COLORS, formatMinutes } from "@/utils/meetingDisplay";
+import { parseTravelLimit, parseSpacing } from "@/utils/meetingOptions";
 import { ORIGIN_IDS, parseOriginCoordinate, validateOriginLocation, type OriginId } from "@/utils/originLocation";
 
-const OSM_ATTRIBUTION = '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>';
 const RERANK_DEBOUNCE_MS = 250;
-const RASTER_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    basemap: {
-      type: "raster",
-      tiles: [process.env.NEXT_PUBLIC_MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      maxzoom: 19,
-    },
-  },
-  layers: [{ id: "basemap", type: "raster", source: "basemap" }],
-};
+const BASEMAP = basemapSettings(
+  process.env.NEXT_PUBLIC_MAP_STYLE_URL,
+  process.env.NEXT_PUBLIC_MAP_TILE_URL,
+  process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION,
+  process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION_URL,
+);
 
 type Coverage =
   | { status: "loading" }
@@ -44,8 +38,24 @@ type MeetingSearch =
   | { status: "error"; message: string }
   | { status: "result"; outcome: MeetingOutcome; stale: boolean };
 
+function meetingStatus(search: MeetingSearch, ready: boolean) {
+  switch (search.status) {
+    case "loading":
+      return search.reranking ? "Updating spots…" : "Finding your spot…";
+    case "result":
+      if (search.stale) return "Out of date.";
+      return search.outcome.status === "success" ? `${search.outcome.results.length} spots found.`
+        : "No spot within the travel limit.";
+    case "idle":
+      return ready ? "Ready to find a spot." : "";
+    default:
+      return "";
+  }
+}
+
 export default function MapView() {
   const container = useRef<HTMLDivElement>(null);
+  const dock = useRef<HTMLElement>(null);
   const pendingMeeting = useRef<AbortController>(null);
   const queuedRerank = useRef<number>(null);
   const cachedRequestId = useRef<string>(null);
@@ -56,12 +66,14 @@ export default function MapView() {
   const [selected, setSelected] = useState<OriginId>("A");
   const [locations, setLocations] = useState<Partial<Record<OriginId, Location>>>({});
   const [draft, setDraft] = useState<{ lat: string; lon: string } | null>(null);
-  const [originError, setOriginError] = useState("");
+  const [originError, setOriginError] = useState<{ message: string; fromForm: boolean } | null>(null);
   const [search, setSearch] = useState<MeetingSearch>({ status: "idle" });
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [hiddenRoutes, setHiddenRoutes] = useState<ReadonlySet<OriginId>>(() => new Set());
   const [changedPhi, setChangedPhi] = useState<number>();
   const [changedTime, setChangedTime] = useState<string>();
+  const [changedCount, setChangedCount] = useState<number>();
+  const [changedSpacing, setChangedSpacing] = useState<string>();
   const visibleSnaps = search.status === "result" && !search.stale ? search.outcome.snaps : null;
   const visibleMeetings = search.status === "result" && !search.stale && search.outcome.status === "success"
     ? search.outcome.results : null;
@@ -74,11 +86,27 @@ export default function MapView() {
   const fields = draft ?? { lat: location?.lat.toString() ?? "", lon: location?.lon.toString() ?? "" };
   const placedCount = Object.keys(locations).length;
   const config = coverage.status === "ready" ? coverage.config : null;
-  const phi = changedPhi ?? config?.defaults.phi ?? null;
-  const timeInput = changedTime ?? config?.defaults.max_travel_seconds.toString() ?? "";
-  const timeSeconds = config ? parseTravelLimit(timeInput, config.limits.max_travel_seconds) : null;
-  const canFindMeeting = placedCount === ORIGIN_IDS.length && draft === null && config !== null
-    && phi !== null && timeSeconds !== null;
+  const options = config ? {
+    phi: changedPhi ?? config.defaults.phi,
+    time: changedTime ?? String(config.defaults.max_travel_seconds),
+    count: changedCount ?? config.defaults.top_k,
+    spacing: changedSpacing ?? String(config.defaults.min_spacing_meters),
+  } : null;
+  function readOptions(values: NonNullable<typeof options>): Optimization | null {
+    if (!config) return null;
+    const seconds = parseTravelLimit(values.time, config.limits.max_travel_seconds);
+    const spacing = parseSpacing(values.spacing, config.limits.min_spacing_meters);
+    if (seconds === null || spacing === null) return null;
+    return { phi: values.phi, max_travel_seconds: seconds, top_k: values.count, min_spacing_meters: spacing };
+  }
+  const optimization = options && readOptions(options);
+  const canFindMeeting = placedCount === ORIGIN_IDS.length && draft === null && optimization !== null;
+  const mapPadding = useCallback(() => {
+    const canvas = container.current?.getBoundingClientRect();
+    const controls = dock.current?.getBoundingClientRect();
+    const overlap = canvas && controls ? Math.max(0, canvas.bottom - controls.top) : 0;
+    return { top: 64, right: 40, bottom: 40 + overlap, left: 40 };
+  }, []);
 
   function cancelQueuedRerank() {
     if (queuedRerank.current !== null) window.clearTimeout(queuedRerank.current);
@@ -94,11 +122,11 @@ export default function MapView() {
       : { status: "idle" });
   }
 
-  function saveLocation(id: OriginId, position: Location): boolean {
+  function saveLocation(id: OriginId, position: Location, fromForm = false): boolean {
     if (!config) return false;
     const error = validateOriginLocation(position, config.aoi);
     if (error) {
-      setOriginError(`Người ${id} · ${error}`);
+      setOriginError({ message: `Friend ${id} · ${error}`, fromForm });
       return false;
     }
     const previous = locations[id];
@@ -108,7 +136,7 @@ export default function MapView() {
       setLocations((current) => ({ ...current, [id]: position }));
     }
     if (id === selected) setDraft(null);
-    setOriginError("");
+    setOriginError(null);
     return true;
   }
 
@@ -118,16 +146,25 @@ export default function MapView() {
       lat: parseOriginCoordinate(fields.lat),
       lon: parseOriginCoordinate(fields.lon),
     };
-    if (saveLocation(selected, position) && map && !map.getBounds().contains([position.lon, position.lat])) {
+    if (saveLocation(selected, position, true) && map && !map.getBounds().contains([position.lon, position.lat])) {
       map.panTo([position.lon, position.lat], { duration: 0 });
     }
+  }
+
+  function editCoordinates(field: "lat" | "lon", value: string) {
+    cancelQueuedRerank();
+    setOriginError(null);
+    setDraft({ ...fields, [field]: value });
   }
 
   const placeOnMap = useEffectEvent((event: MapMouseEvent) => {
     const target = event.originalEvent.target;
     if (target instanceof Element && target.closest(".origin-marker, .meeting-marker")) return;
     const { lng, lat } = event.lngLat.wrap();
-    saveLocation(selected, { lat, lon: lng });
+    if (saveLocation(selected, { lat, lon: lng }) && !locations[selected]) {
+      const next = ORIGIN_IDS.find((id) => id !== selected && !locations[id]);
+      if (next) setSelected(next);
+    }
   });
 
   async function calculateMeeting(optimization: Optimization, requestId?: string) {
@@ -152,13 +189,18 @@ export default function MapView() {
         : await findMeetingPoints(origins, request.signal, optimization);
       if (!request.signal.aborted) {
         cachedRequestId.current = outcome.requestId;
+        setSelectedNodeId((current) => {
+          if (outcome.status !== "success") return null;
+          if (requestId && outcome.results.some((result) => result.node_id === current)) return current;
+          return outcome.results[0].node_id;
+        });
         setSearch({ status: "result", outcome, stale: false });
       }
     } catch (error) {
       if (!request.signal.aborted) {
         setSearch({
           status: "error",
-          message: error instanceof Error ? error.message : "Không tính được điểm gặp. Hãy thử lại.",
+          message: error instanceof Error ? error.message : "Could not find a spot. Try again.",
         });
       }
     } finally {
@@ -166,17 +208,31 @@ export default function MapView() {
     }
   }
 
-  function scheduleRerank(nextPhi: number, nextTimeInput: string) {
+  function scheduleRerank(values: NonNullable<typeof options>) {
     invalidateSearch();
     const requestId = cachedRequestId.current;
-    if (!config || !requestId || draft !== null) return;
-    const seconds = parseTravelLimit(nextTimeInput, config.limits.max_travel_seconds);
-    if (seconds === null) return;
-    const optimization = { ...config.defaults, phi: nextPhi, max_travel_seconds: seconds };
+    const next = readOptions(values);
+    if (!requestId || draft !== null || !next) return;
     queuedRerank.current = window.setTimeout(() => {
       queuedRerank.current = null;
-      void calculateMeeting(optimization, requestId);
+      void calculateMeeting(next, requestId);
     }, RERANK_DEBOUNCE_MS);
+  }
+
+  function resetLocations() {
+    invalidateSearch();
+    cachedRequestId.current = null;
+    setLocations({});
+    setSelected("A");
+    setDraft(null);
+    setOriginError(null);
+    setSelectedNodeId(null);
+    setHiddenRoutes(new Set());
+    setSearch({ status: "idle" });
+    if (config) map?.fitBounds(coordinateBounds(config.aoi.coordinates[0]), {
+      padding: mapPadding(), duration: 0, maxZoom: 16,
+    });
+    document.getElementById("friend-A")?.focus();
   }
 
   function toggleRoute(id: OriginId) {
@@ -203,18 +259,23 @@ export default function MapView() {
       setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).toString());
       instance = new Map({
         container: element,
-        style: process.env.NEXT_PUBLIC_MAP_STYLE_URL || RASTER_STYLE,
+        style: BASEMAP.style,
         center: [105.8342, 21.0278],
         zoom: 11,
-        attributionControl: { compact: false, customAttribution: OSM_ATTRIBUTION },
+        locale: {
+          "Map.Title": "Interactive Hanoi map",
+          "NavigationControl.ZoomIn": "Zoom in",
+          "NavigationControl.ZoomOut": "Zoom out",
+        },
+        attributionControl: { compact: false, customAttribution: BASEMAP.attribution },
       });
       instance.addControl(new NavigationControl({ showCompass: false }));
       const currentMap = instance;
       currentMap.once("style.load", () => setMapRuntime({ map: currentMap, MarkerClass: Marker }));
-      currentMap.on("error", () => setMapError("Không tải được một phần bản đồ nền."));
+      currentMap.on("error", () => setMapError("Some map tiles could not load."));
     }
     openMap(element).catch(() => {
-      if (!disposed) setMapError("Không mở được bản đồ. Hãy kiểm tra hỗ trợ WebGL của trình duyệt.");
+      if (!disposed) setMapError("The map could not start. Check your browser’s WebGL support.");
     });
     return () => {
       disposed = true;
@@ -231,10 +292,10 @@ export default function MapView() {
       (error: unknown) => {
         if (controller.signal.aborted) return;
         const message = error instanceof TypeError || error instanceof SyntaxError
-          ? "Không đọc được cấu hình bản đồ. Hãy kiểm tra kết nối backend."
+          ? "Could not load the map settings. Check the server connection."
           : error instanceof DOMException && error.name === "TimeoutError"
-            ? "Backend phản hồi quá lâu. Hãy thử lại."
-            : error instanceof Error ? error.message : "Không tải được phạm vi hỗ trợ.";
+            ? "The server took too long. Try again."
+            : error instanceof Error ? error.message : "Could not load map coverage.";
         setCoverage({ status: "error", message });
       },
     );
@@ -244,136 +305,186 @@ export default function MapView() {
   useEffect(() => {
     if (!map || coverage.status !== "ready") return;
     const { aoi } = coverage.config;
+    map.addSource("w2m-aoi-mask", {
+      type: "geojson",
+      data: { type: "Feature", properties: {}, geometry: outsideAoiMask(aoi) },
+    });
+    map.addLayer({
+      id: "w2m-aoi-mask", source: "w2m-aoi-mask", type: "fill",
+      paint: { "fill-color": "#f3edf1", "fill-opacity": 0.62, "fill-antialias": false },
+    });
     map.addSource("w2m-aoi", {
       type: "geojson",
       data: { type: "Feature", properties: {}, geometry: aoi },
     });
     map.addLayer({
       id: "w2m-aoi-fill", source: "w2m-aoi", type: "fill",
-      paint: { "fill-color": "#07664d", "fill-opacity": 0.10 },
+      paint: { "fill-color": "#ff8fbf", "fill-opacity": 0.08 },
     });
     map.addLayer({
       id: "w2m-aoi-outline", source: "w2m-aoi", type: "line",
-      paint: { "line-color": "#07664d", "line-width": 3 },
+      paint: { "line-color": "#c64480", "line-width": 2.5, "line-dasharray": [1, 2] },
     });
-    map.fitBounds(coordinateBounds(aoi.coordinates[0]), { padding: 32, duration: 0, maxZoom: 16 });
+    map.fitBounds(coordinateBounds(aoi.coordinates[0]), { padding: mapPadding(), duration: 0, maxZoom: 16 });
     const onClick = (event: MapMouseEvent) => placeOnMap(event);
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
-  }, [map, coverage]);
+  }, [map, coverage, mapPadding]);
 
+  const state = search.status === "result" ? (search.stale ? "stale" : search.outcome.status)
+    : search.status === "idle" && canFindMeeting ? "ready" : search.status;
+  const status = meetingStatus(search, canFindMeeting) || (state === "error" ? "Search failed."
+    : placedCount === ORIGIN_IDS.length ? "Check the search inputs." : "Waiting for 4 friends.");
+  const mascot = <svg className="mascot" viewBox="0 0 48 48" aria-hidden="true">
+    <path d="M24 46 C 15 35, 7 27, 7 18 A 17 17 0 0 1 41 18 C 41 27, 33 35, 24 46Z" fill="#ff8fbf"/>
+    <path d="M24 46 C 15 35, 7 27, 7 18 A 17 17 0 0 1 41 18" fill="none" stroke="#fff" strokeWidth="2" opacity=".5"/>
+    <circle cx="18" cy="18" r="2.6" fill="#5a3b4c"/><circle cx="30" cy="18" r="2.6" fill="#5a3b4c"/>
+    <circle cx="18.8" cy="17.2" r=".9" fill="#fff"/><circle cx="30.8" cy="17.2" r=".9" fill="#fff"/>
+    <ellipse cx="13.5" cy="23" rx="3" ry="2" fill="#ff5f9e" opacity=".55"/><ellipse cx="34.5" cy="23" rx="3" ry="2" fill="#ff5f9e" opacity=".55"/>
+    <path d="M21 23 Q 24 26 27 23" fill="none" stroke="#5a3b4c" strokeWidth="2" strokeLinecap="round"/>
+  </svg>;
   return (
-    <div className="meeting-layout">
-      <section className="meeting-map" id="meeting-map" aria-label="Bản đồ Hà Nội">
-        <div className="map" ref={container} />
-        {map && visibleSnaps && <SnapLayer map={map} snaps={visibleSnaps} />}
-        {map && selectedMeeting && <RouteLayer map={map} routes={selectedMeeting.routes} hidden={hiddenRoutes} />}
-        {mapRuntime && ORIGIN_IDS.map((id) => {
-          const position = locations[id];
-          return position && (
-            <OriginMarker key={id} map={mapRuntime.map} MarkerClass={mapRuntime.MarkerClass}
-              id={id} location={position} selected={selected === id} onMove={saveLocation} />
-          );
-        })}
-        {mapRuntime && visibleMeetings && (
-          <MeetingMarkers map={mapRuntime.map} MarkerClass={mapRuntime.MarkerClass} results={visibleMeetings}
-            selectedRank={selectedMeeting?.rank ?? null} onSelect={selectMeeting} />
-        )}
-        <div className="map-status">
-          <p role="status">
-            {coverage.status === "loading" && "Đang tải phạm vi hỗ trợ…"}
-            {coverage.status === "error" && coverage.message}
-            {coverage.status === "ready" && map && (
-              <><span className="aoi-key" aria-hidden="true" /> Ranh giới phạm vi hỗ trợ</>
-            )}
-          </p>
-          {coverage.status === "error" && (
-            <button type="button" onClick={() => {
-              setCoverage({ status: "loading" });
-              setAttempt(attempt + 1);
-            }}>Thử lại</button>
-          )}
-          {mapError && <p role="status">{mapError}</p>}
-          {map && visibleSnaps && (
-            <p><span className="snap-key" aria-hidden="true" /> Điểm snap · Nét đứt là đoạn tiếp cận</p>
-          )}
-        </div>
-      </section>
-      <section className="origins" aria-labelledby="origins-heading">
-        <h2 id="origins-heading">Vị trí xuất phát</h2>
-        <p id="origins-help">Chọn người rồi bấm vào bản đồ hoặc nhập tọa độ. Kéo marker để chỉnh vị trí.</p>
-        <div className="origin-options" role="group" aria-label="Chọn người">
-          {ORIGIN_IDS.map((id) => (
-            <button key={id} type="button" data-person={id} aria-pressed={selected === id}
-              aria-label={`Người ${id}${locations[id] ? ", đã đặt vị trí" : ""}`}
-              onClick={() => {
-                if (id === selected) return;
-                setSelected(id);
-                setDraft(null);
-                setOriginError("");
-              }}>
-              {id}{locations[id] && <span aria-hidden="true"> ✓</span>}
-            </button>
-          ))}
-        </div>
-        <p role="status">
-          {placedCount === ORIGIN_IDS.length ? "Đã đặt đủ 4 vị trí." : `Đã đặt ${placedCount}/4 vị trí.`}
+    <main className="app-shell">
+      <header className="app-header">
+        {mascot}
+        <div><h1>W2M</h1><p>Let&apos;s meet in the middle</p></div>
+        {config && <span className="map-chip">Hanoi · car · Road data {config.source_date}</span>}
+        <p id="meeting-status" className="state-chip" role="status" data-state={state}>
+          {status}
         </p>
-        <form className="origin-form" onSubmit={submitLocation} aria-describedby="origins-help">
-          <fieldset disabled={coverage.status !== "ready"}>
-            <legend>Tọa độ người {selected}</legend>
-            <label>
-              Vĩ độ
-              <input type="text" inputMode="decimal" value={fields.lat}
-                onChange={(event) => {
-                  cancelQueuedRerank();
-                  setDraft({ ...fields, lat: event.target.value });
-                }} />
-            </label>
-            <label>
-              Kinh độ
-              <input type="text" inputMode="decimal" value={fields.lon}
-                onChange={(event) => {
-                  cancelQueuedRerank();
-                  setDraft({ ...fields, lon: event.target.value });
-                }} />
-            </label>
-            <button type="submit">Lưu vị trí</button>
-          </fieldset>
-          {originError && <p className="origin-error" role="alert">{originError}</p>}
-        </form>
-        {config && phi !== null && (
-          <MeetingOptions limits={config.limits} phi={phi} timeInput={timeInput} validTime={timeSeconds !== null}
-            onPhiChange={(value) => {
-              if (value === phi) return;
-              setChangedPhi(value);
-              scheduleRerank(value, timeInput);
-            }}
-            onTimeChange={(value) => {
-              setChangedTime(value);
-              scheduleRerank(phi, value);
+      </header>
+      <div className="meeting-layout">
+        <a className="skip-map" href="#origin-controls">Skip to the crew</a>
+        <section className="meeting-map" id="meeting-map" aria-label="Hanoi map" tabIndex={-1}>
+          <div className="map" ref={container} />
+          {map && config && <div className="map-hint"><strong>Placing friend {selected}</strong> · Tap the map or drag a pin</div>}
+          {search.status === "loading" && <div className="map-loading" aria-hidden="true">
+            <span>{search.reranking ? "Updating spots…" : "Finding your spot…"}</span>
+          </div>}
+          {map && visibleSnaps && <SnapLayer map={map} snaps={visibleSnaps} />}
+          {map && selectedMeeting && <RouteLayer map={map} routes={selectedMeeting.routes} hidden={hiddenRoutes} padding={mapPadding} />}
+          {mapRuntime && ORIGIN_IDS.map((id) => {
+            const position = locations[id];
+            return position && (
+              <OriginMarker key={id} map={mapRuntime.map} MarkerClass={mapRuntime.MarkerClass}
+                id={id} location={position} selected={selected === id} onMove={saveLocation} />
+            );
+          })}
+          {mapRuntime && visibleMeetings && (
+            <MeetingMarkers map={mapRuntime.map} MarkerClass={mapRuntime.MarkerClass} results={visibleMeetings}
+              selectedRank={selectedMeeting?.rank ?? null} onSelect={selectMeeting} />
+          )}
+          <div className="map-status">
+            <p role="status">
+              {coverage.status === "loading" && "Loading map coverage…"}
+              {coverage.status === "error" && coverage.message}
+              {coverage.status === "ready" && map && (
+                <><span className="aoi-key" aria-hidden="true" /> Supported area boundary</>
+              )}
+            </p>
+            {coverage.status === "error" && (
+              <button type="button" onClick={() => {
+                setCoverage({ status: "loading" });
+                setAttempt(attempt + 1);
+              }}>Try again</button>
+            )}
+            {mapError && <p role="status">{mapError}</p>}
+            {map && !BASEMAP.configured && <p>Basemap tiles are not configured.</p>}
+            {map && visibleSnaps && (
+              <p><span className="snap-key" aria-hidden="true" /> Road access points · dashed access lines</p>
+            )}
+          </div>
+        </section>
+        <section className="origins" id="origin-controls" aria-labelledby="origins-heading" tabIndex={-1}>
+          <div className="section-heading"><h2 id="origins-heading">The crew</h2>
+            <button type="button" className="reset-crew" disabled={!placedCount && !draft}
+              onClick={resetLocations}>Reset</button></div>
+          <p id="origins-help">Choose a friend, then place or drag their pin on the map.</p>
+          <div className="origin-options" role="group" aria-label="Choose a friend">
+            {ORIGIN_IDS.map((id) => {
+              const point = locations[id];
+              const snap = visibleSnaps?.find((entry) => entry.id === id);
+              return (
+                <button key={id} id={`friend-${id}`} type="button" data-person={id} aria-pressed={selected === id}
+                  aria-label={`Friend ${id}${locations[id] ? ", location set" : ""}`}
+                  onClick={() => {
+                    if (id === selected) return;
+                    setSelected(id);
+                    setDraft(null);
+                    setOriginError(null);
+                  }}>
+                  <span className="friend-avatar" style={{ backgroundColor: ORIGIN_COLORS[id] }} aria-hidden="true">{id}</span>
+                  <span className="friend-copy"><strong>Friend {id}</strong>
+                    <small>{point ? `${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}` : "Not placed"}</small>
+                    {snap && <small>{Math.round(snap.snap_distance_m)} m · +{formatMinutes(snap.access_seconds)} min</small>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p role="status">
+            {placedCount === ORIGIN_IDS.length ? "All 4 friends placed." : `${placedCount}/4 friends placed.`}
+          </p>
+          <details className="manual-coordinates">
+            <summary>Enter coordinates for friend {selected}</summary>
+            <form className="origin-form" onSubmit={submitLocation} aria-describedby="origins-help">
+              <fieldset disabled={coverage.status !== "ready"}>
+                <legend>Coordinates for friend {selected}</legend>
+                <label>
+                  Latitude
+                  <input type="text" inputMode="decimal" value={fields.lat}
+                    aria-invalid={originError?.fromForm || undefined}
+                    aria-describedby={originError?.fromForm ? "origin-error" : undefined}
+                    onChange={(event) => editCoordinates("lat", event.target.value)} />
+                </label>
+                <label>
+                  Longitude
+                  <input type="text" inputMode="decimal" value={fields.lon}
+                    aria-invalid={originError?.fromForm || undefined}
+                    aria-describedby={originError?.fromForm ? "origin-error" : undefined}
+                    onChange={(event) => editCoordinates("lon", event.target.value)} />
+                </label>
+                <button type="submit">Set location</button>
+              </fieldset>
+            </form>
+          </details>
+          <p id="origin-error" className="origin-error search-feedback" role="alert">{originError?.message}</p>
+          {visibleSnaps && <SnapDetails snaps={visibleSnaps} />}
+        </section>
+        <section className="search-dock" aria-label="Search options" ref={dock}>
+          {config && options && (
+            <MeetingOptions limits={config.limits} values={options} onChange={(next) => {
+              setChangedPhi(next.phi);
+              setChangedTime(next.time);
+              setChangedCount(next.count);
+              setChangedSpacing(next.spacing);
+              scheduleRerank(next);
             }} />
-        )}
-        {placedCount === ORIGIN_IDS.length && draft && <p>Lưu tọa độ đang sửa trước khi tìm điểm gặp.</p>}
-        <button className="find-meeting" type="button" disabled={!canFindMeeting || search.status === "loading"}
-          onClick={() => {
-            if (!config || phi === null || timeSeconds === null) return;
-            cancelQueuedRerank();
-            void calculateMeeting({ ...config.defaults, phi, max_travel_seconds: timeSeconds });
-          }}>
-          {search.status === "error" ? "Thử lại" : "Tìm điểm gặp"}
-        </button>
-        {search.status === "loading" && <p role="status">
-          {search.reranking ? "Đang cập nhật điểm gặp…" : "Đang tính điểm gặp…"}
-        </p>}
-        {search.status === "error" && <p className="origin-error" role="alert">{search.message}</p>}
-        {visibleSnaps && <SnapDetails snaps={visibleSnaps} />}
-        {search.status === "result" && (
-          <MeetingResults outcome={search.outcome} stale={search.stale}
-            selectedRank={selectedMeeting?.rank ?? null} onSelect={selectMeeting}
-            hiddenRoutes={hiddenRoutes} onToggleRoute={toggleRoute} />
-        )}
-      </section>
-    </div>
+          )}
+          {placedCount === ORIGIN_IDS.length && draft && <p>Save the coordinates before finding a spot.</p>}
+          {options && !optimization && <p className="origin-error">Check the travel limit and minimum spacing.</p>}
+          <button className="find-meeting" type="button" disabled={!canFindMeeting}
+            aria-disabled={search.status === "loading" || undefined}
+            onClick={() => {
+              if (!canFindMeeting || search.status === "loading" || !optimization) return;
+              cancelQueuedRerank();
+              void calculateMeeting(optimization);
+            }}>
+            {search.status === "error" ? "Try again" : "Find a spot"}
+          </button>
+          <p className="origin-error search-feedback" role="alert">{search.status === "error" && search.message}</p>
+        </section>
+        <section className="results-panel" aria-labelledby="meeting-results-heading">
+          <h2 id="meeting-results-heading">Suggested spots</h2>
+          {state === "stale" && <p className="stale-banner">Out of date. Find a spot to refresh the results.</p>}
+          {search.status === "idle" && <p>Place all four friends, then find a spot.</p>}
+          {search.status === "result" && (
+            <MeetingResults outcome={search.outcome} stale={search.stale}
+              selectedRank={selectedMeeting?.rank ?? null} onSelect={selectMeeting}
+              hiddenRoutes={hiddenRoutes} onToggleRoute={toggleRoute} />
+          )}
+        </section>
+      </div>
+    </main>
   );
 }

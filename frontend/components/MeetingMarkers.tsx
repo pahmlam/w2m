@@ -17,7 +17,7 @@ export default function MeetingMarkers({ map, MarkerClass, results, selectedRank
       element.type = "button";
       element.className = "meeting-marker";
       element.textContent = String(rank);
-      element.setAttribute("aria-label", `Điểm gặp ${rank} trên bản đồ`);
+      element.setAttribute("aria-label", `Spot ${rank} on the map`);
       element.addEventListener("click", (event) => {
         event.stopPropagation();
         onSelect(rank);

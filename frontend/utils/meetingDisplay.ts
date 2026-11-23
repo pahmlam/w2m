@@ -2,14 +2,14 @@ import type { OriginSnap } from "../services/meetingApi";
 import type { Route } from "../types/meeting";
 import type { OriginId } from "./originLocation";
 
-const minutes = new Intl.NumberFormat("vi", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const minutes = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const ACCESS_LINE_MIN_METERS = 30;
 
 export const ORIGIN_COLORS: Record<OriginId, string> = {
-  A: "#075e46",
-  B: "#18558c",
-  C: "#943a21",
-  D: "#634389",
+  A: "#2379ab",
+  B: "#b5316c",
+  C: "#187b57",
+  D: "#744ab1",
 };
 
 export function formatMinutes(seconds: number): string {

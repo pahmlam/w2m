@@ -18,13 +18,13 @@ test("accepts points inside coverage or on an exterior or hole boundary", () => 
 
 test("rejects points in a hole, a concave cutout, or beyond the outline", () => {
   for (const [lon, lat] of [[102, 12], [105, 17], [99, 12]]) {
-    assert.match(validateOriginLocation({ lon, lat }, aoi), /ngoài phạm vi/);
+    assert.match(validateOriginLocation({ lon, lat }, aoi), /outside the supported area/);
   }
 });
 
 test("rejects non-finite or out-of-range coordinates", () => {
   for (const [lon, lat] of [[105, NaN], [105, Infinity], [21, 105], [181, 21]]) {
-    assert.match(validateOriginLocation({ lon, lat }, aoi), /Nhập vĩ độ/);
+    assert.match(validateOriginLocation({ lon, lat }, aoi), /Enter latitude/);
   }
 });
 

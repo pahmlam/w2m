@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { FilterSpecification, Map } from "maplibre-gl";
+import type { FilterSpecification, Map, PaddingOptions } from "maplibre-gl";
 
 import { SNAP_ACCESS_LAYER } from "@/components/SnapLayer";
 import type { DisplayedResult } from "@/services/meetingApi";
@@ -10,10 +10,11 @@ const SOURCE = "w2m-routes";
 const OUTLINE_LAYER = "w2m-route-outline";
 const ROUTE_LAYER = "w2m-route-lines";
 
-export default function RouteLayer({ map, routes, hidden }: {
+export default function RouteLayer({ map, routes, hidden, padding }: {
   map: Map;
   routes: DisplayedResult["routes"];
   hidden: ReadonlySet<OriginId>;
+  padding: () => PaddingOptions;
 }) {
   useEffect(() => {
     const data = routeFeatures(routes, ORIGIN_IDS);
@@ -29,16 +30,19 @@ export default function RouteLayer({ map, routes, hidden }: {
       layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": ["get", "color"], "line-width": 4 },
     }, before);
-    map.fitBounds(coordinateBounds(data.features.flatMap((feature) => feature.geometry.coordinates)),
-      { padding: 48, duration: 0, maxZoom: 16 });
+    const bounds = coordinateBounds(data.features.flatMap((feature) => feature.geometry.coordinates));
+    const fitRoutes = () => map.fitBounds(bounds, { padding: padding(), duration: 0, maxZoom: 16 });
+    fitRoutes();
+    map.on("resize", fitRoutes);
 
     return () => {
+      map.off("resize", fitRoutes);
       if (!map.getSource(SOURCE)) return;
       map.removeLayer(ROUTE_LAYER);
       map.removeLayer(OUTLINE_LAYER);
       map.removeSource(SOURCE);
     };
-  }, [map, routes]);
+  }, [map, routes, padding]);
 
   useEffect(() => {
     const ids = ORIGIN_IDS.filter((id) => !hidden.has(id));

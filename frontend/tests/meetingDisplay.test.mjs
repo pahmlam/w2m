@@ -21,8 +21,8 @@ test("always emits snap positions and draws an access line only above 30 meters"
 });
 
 test("formats API seconds as minutes with one decimal", () => {
-  assert.equal(formatMinutes(0), "0,0");
-  assert.equal(formatMinutes(63.2), "1,1");
+  assert.equal(formatMinutes(0), "0.0");
+  assert.equal(formatMinutes(63.2), "1.1");
 });
 
 test("keeps backend route coordinates intact and fits bounds across all route vertices", () => {

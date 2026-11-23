@@ -65,17 +65,17 @@ test("reads exact and lower-bound time hints for an empty result", async (t) => 
 test("rejects a malformed success response instead of displaying it", async (t) => {
   t.mock.method(globalThis, "fetch", async () =>
     Response.json({ ...success, results: [{ ...first, score: "115" }] }));
-  await assert.rejects(findMeetingPoints(origins, new AbortController().signal), /không hợp lệ/);
+  await assert.rejects(findMeetingPoints(origins, new AbortController().signal), /invalid/);
 });
 
 test("rejects unmatched snaps and missing per-person times", async (t) => {
   const fetch = t.mock.method(globalThis, "fetch", async () =>
     Response.json({ ...success, origins: [...snaps.slice(0, -1), snaps[0]] }));
-  await assert.rejects(findMeetingPoints(origins, new AbortController().signal), /không hợp lệ/);
+  await assert.rejects(findMeetingPoints(origins, new AbortController().signal), /invalid/);
   fetch.mock.mockImplementation(async () => Response.json({
     ...success, results: [{ ...first, travel_times: { A: 100, B: 120, C: 130 } }],
   }));
-  await assert.rejects(findMeetingPoints(origins, new AbortController().signal), /không hợp lệ/);
+  await assert.rejects(findMeetingPoints(origins, new AbortController().signal), /invalid/);
 });
 
 test("requires GeoJSON routes for all origins and preserves a zero-length line", async (t) => {
@@ -95,7 +95,7 @@ test("requires GeoJSON routes for all origins and preserves a zero-length line",
     fetch.mock.mockImplementation(async () => Response.json({
       ...success, results: [{ ...first, routes: badRoutes }],
     }));
-    await assert.rejects(findMeetingPoints(origins, signal), /không hợp lệ/);
+    await assert.rejects(findMeetingPoints(origins, signal), /invalid/);
   }
 });
 
@@ -103,11 +103,11 @@ test("provides actionable messages for snap, readiness and connection failures",
   const fetch = t.mock.method(globalThis, "fetch", async () =>
     Response.json({ error_code: "SNAP_FAILED" }, { status: 422 }));
   const signal = new AbortController().signal;
-  await assert.rejects(findMeetingPoints(origins, signal), /gần đường/);
+  await assert.rejects(findMeetingPoints(origins, signal), /closer to a road/);
   fetch.mock.mockImplementation(async () => new Response(null, { status: 503 }));
-  await assert.rejects(findMeetingPoints(origins, signal), /chưa sẵn sàng/);
+  await assert.rejects(findMeetingPoints(origins, signal), /not ready/);
   fetch.mock.mockImplementation(async () => { throw new TypeError("Failed to fetch"); });
-  await assert.rejects(findMeetingPoints(origins, signal), /Không kết nối được/);
+  await assert.rejects(findMeetingPoints(origins, signal), /Could not reach/);
 });
 
 test("ignores a completed response when its caller has already canceled", async (t) => {
@@ -122,7 +122,7 @@ test("ignores a completed response when its caller has already canceled", async 
 test("distinguishes a timeout from a canceled request", async (t) => {
   t.mock.method(AbortSignal, "timeout", () => AbortSignal.abort(new DOMException("Timeout", "TimeoutError")));
   t.mock.method(globalThis, "fetch", async (_url, { signal }) => signal.throwIfAborted());
-  await assert.rejects(findMeetingPoints(origins, new AbortController().signal), /quá lâu/);
+  await assert.rejects(findMeetingPoints(origins, new AbortController().signal), /too long/);
 });
 
 test("reranks from the cache ID using optimization alone", async (t) => {
@@ -149,7 +149,7 @@ test("recomputes once on rerank 409 with the same settings and returns the new c
 test("does not loop on failures or recompute after cancellation", async (t) => {
   const fetch = t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 409 }));
   const controller = new AbortController();
-  await assert.rejects(rerankMeetingPoints("cached", origins, optimization, controller.signal), /Cần tính lại/);
+  await assert.rejects(rerankMeetingPoints("cached", origins, optimization, controller.signal), /fresh search/);
   assert.equal(fetch.mock.calls.length, 2);
 
   fetch.mock.mockImplementationOnce(async () => {

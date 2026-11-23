@@ -29,13 +29,13 @@ function classifyRing({ lon, lat }: Location, ring: Polygon["coordinates"][numbe
 
 export function validateOriginLocation(location: Location, aoi: Polygon): string | null {
   if (!(Math.abs(location.lat) <= 90 && Math.abs(location.lon) <= 180)) {
-    return "Nhập vĩ độ từ −90 đến 90 và kinh độ từ −180 đến 180.";
+    return "Enter latitude from −90 to 90 and longitude from −180 to 180.";
   }
   const [outline, ...holes] = aoi.coordinates;
   // Polygon.covers includes the exterior and hole boundaries, but excludes hole interiors.
   if (classifyRing(location, outline) === "outside"
     || holes.some((hole) => classifyRing(location, hole) === "inside")) {
-    return "Vị trí nằm ngoài phạm vi hỗ trợ.";
+    return "This location is outside the supported area.";
   }
   return null;
 }

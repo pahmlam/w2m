@@ -50,23 +50,19 @@ npm --prefix frontend run dev
 - Swagger/OpenAPI: `http://localhost:8000/docs`.
 
 Trang chính tải AOI từ `GET /api/v1/map/config` và căn bản đồ theo phạm vi này.
-Nếu graph chưa sẵn sàng, bấm **Thử lại** sau khi `GET /ready` trả 200.
-Đặt đủ bốn vị trí A–D rồi bấm **Tìm điểm gặp** để xem danh sách theo thứ hạng từ backend.
+Nếu graph chưa sẵn sàng, bấm **Try again** sau khi `GET /ready` trả 200.
+Đặt đủ bốn vị trí A–D rồi bấm **Find a spot** để xem danh sách theo thứ hạng từ backend.
 
 ### Bản đồ nền local
 
-Mặc định, trình duyệt dùng raster OpenStreetMap Standard qua HTTPS và hiển thị
-ghi công OpenStreetMap trực tiếp trên bản đồ. Nguồn này dành cho xem thử tương
-tác với lưu lượng thấp, cần Internet và có thể bị giới hạn hoặc gián đoạn. Giữ
-Referer và cache HTTP của trình duyệt. Không tải hàng loạt, tải trước hay dùng
-tile này để chạy offline.
-[Điều khoản sử dụng tile OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/)
+Mẫu cấu hình dùng raster **CARTO Positron**. Điền URL tile và ghi công nhà cung
+cấp trong `frontend/.env.local` theo `frontend/.env.example`. Nếu có
+`NEXT_PUBLIC_MAP_STYLE_URL`, ứng dụng ưu tiên style MapLibre JSON đó. Khởi động
+lại dev server hoặc build lại bản production sau khi đổi biến môi trường.
 
-Đặt `NEXT_PUBLIC_MAP_STYLE_URL` trong `frontend/.env.local` để dùng style JSON
-của nhà cung cấp khác. Khi trường style để trống, có thể đổi raster bằng
-`NEXT_PUBLIC_MAP_TILE_URL` theo mẫu `{z}/{x}/{y}`. Nếu nhà cung cấp raster yêu
-cầu ghi công riêng, dùng style JSON khai báo `attribution` của nguồn đó. Khởi
-động lại frontend sau khi đổi cấu hình.
+Bản đồ luôn ghi công OpenStreetMap. Khi thiếu cấu hình tile, ứng dụng thông báo
+và hiển thị các lớp AOI, vị trí và tuyến trên nền trống. Xem nguồn tile, yêu cầu
+API key, giấy phép và xử lý sự cố trong [tài liệu vận hành M6](docs/plans/W2M-M6-Tile-Provider.md).
 
 ### API local
 
@@ -110,6 +106,17 @@ Test backend dùng fixture cố định và OSMnx giả lập cho bước tải;
 ETA service. Các test roundtrip dùng OSMnx thật để lưu/nạp graph tổng hợp local.
 CI tại `.github/workflows/ci.yml` chạy backend Ruff/pytest và frontend
 lint/typecheck/build; hiện chưa cài extra `data`, nên không kiểm tra toàn bộ roundtrip.
+
+### E2E M5 với bundle Vành đai 3
+
+Chạy backend và frontend theo mục **Chạy development**, rồi chạy các lệnh sau.
+Chromium chỉ cần cài một lần. Bộ E2E dùng graph thật, chặn tile ngoài và mô phỏng
+lỗi mạng cùng phản hồi đến muộn.
+
+```sh
+npm --prefix frontend exec -- playwright install chromium --only-shell
+npm --prefix frontend run test:e2e
+```
 
 Bằng chứng local gần nhất:
 

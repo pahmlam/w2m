@@ -7,10 +7,9 @@ const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:
 
 export type OriginSnap = SnappedOrigin & { input: Location };
 
-export type SearchOptions = Pick<Optimization, "phi" | "max_travel_seconds">;
-export type MeetingMapConfig = Pick<MapConfig, "aoi"> & {
+export type MeetingMapConfig = Pick<MapConfig, "aoi" | "source_date"> & {
   defaults: Optimization;
-  limits: Pick<MapConfig["limits"], keyof SearchOptions>;
+  limits: MapConfig["limits"];
 };
 
 export type DisplayedResult = Pick<MeetingResult,
@@ -23,7 +22,7 @@ export type MeetingOutcome = { requestId: string; snaps: OriginSnap[] } & (
   | { status: "empty"; minimum?: { seconds: number; lowerBound: boolean } }
 );
 
-const INVALID_MEETING_RESPONSE = "Backend trả về kết quả điểm gặp không hợp lệ.";
+const INVALID_MEETING_RESPONSE = "The server returned invalid meeting results.";
 
 class RecomputeRequired extends Error {}
 
@@ -76,36 +75,45 @@ export async function loadMapConfig(signal: AbortSignal): Promise<MeetingMapConf
     signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
   });
   if (response.status === 503) {
-    throw new Error("Dữ liệu định tuyến chưa sẵn sàng. Hãy thử lại sau khi backend nạp đồ thị.");
+    throw new Error("Routing data is not ready. Try again once the server has loaded the graph.");
   }
-  if (!response.ok) throw new Error("Không tải được phạm vi hỗ trợ từ backend.");
+  if (!response.ok) throw new Error("Could not load map coverage.");
 
   const config: unknown = await response.json();
-  if (!isObject(config)) throw new Error("Backend trả về cấu hình bản đồ không hợp lệ.");
+  if (!isObject(config)) throw new Error("The server returned invalid map settings.");
   const { aoi, limits, defaults } = config;
   if (!isObject(aoi) || aoi.type !== "Polygon" || !Array.isArray(aoi.coordinates)
     || aoi.coordinates.length === 0 || !aoi.coordinates.every(isRing)) {
-    throw new Error("Backend trả về phạm vi hỗ trợ không hợp lệ.");
+    throw new Error("The server returned invalid map coverage.");
   }
   if (!isObject(limits) || !isObject(defaults)) {
-    throw new Error("Backend trả về cấu hình tìm điểm gặp không hợp lệ.");
+    throw new Error("The server returned invalid search settings.");
   }
   const phiRange = limits.phi;
   const timeRange = limits.max_travel_seconds;
+  const countRange = limits.top_k;
+  const spacingRange = limits.min_spacing_meters;
+  const sourceDate = config.source_date;
   const { phi, max_travel_seconds, top_k, min_spacing_meters } = defaults;
   if (!isRange(phiRange) || phiRange.max > 1 || !isRange(timeRange) || !Number.isInteger(timeRange.min)
     || !Number.isInteger(timeRange.max)
     || !isNonnegativeNumber(phi) || phi < phiRange.min || phi > phiRange.max
     || !isNonnegativeNumber(max_travel_seconds) || !Number.isInteger(max_travel_seconds)
     || max_travel_seconds < timeRange.min || max_travel_seconds > timeRange.max
-    || !isNonnegativeNumber(top_k) || !Number.isInteger(top_k) || top_k < 1 || top_k > 5
-    || !isNonnegativeNumber(min_spacing_meters) || min_spacing_meters > 5000) {
-    throw new Error("Backend trả về cấu hình tìm điểm gặp không hợp lệ.");
+    || !isRange(countRange) || !Number.isInteger(countRange.min) || !Number.isInteger(countRange.max)
+    || countRange.min < 1 || countRange.max > 5
+    || !isNonnegativeNumber(top_k) || !Number.isInteger(top_k) || top_k < countRange.min || top_k > countRange.max
+    || !isRange(spacingRange) || !isNonnegativeNumber(min_spacing_meters)
+    || min_spacing_meters < spacingRange.min || min_spacing_meters > spacingRange.max
+    || typeof sourceDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)
+    || !Number.isFinite(Date.parse(sourceDate))) {
+    throw new Error("The server returned invalid search settings.");
   }
   return {
     aoi: { type: aoi.type, coordinates: aoi.coordinates },
     defaults: { phi, max_travel_seconds, top_k, min_spacing_meters },
-    limits: { phi: phiRange, max_travel_seconds: timeRange },
+    limits: { phi: phiRange, max_travel_seconds: timeRange, top_k: countRange, min_spacing_meters: spacingRange },
+    source_date: sourceDate,
   };
 }
 
@@ -187,25 +195,25 @@ async function postMeeting(
     });
     requestSignal.throwIfAborted();
     if (response.status === 409) {
-      throw new RecomputeRequired("Cần tính lại điểm gặp với các tham số hiện tại.");
+      throw new RecomputeRequired("A fresh search is required for these settings.");
     }
     if (response.status === 503) {
-      throw new Error("Dữ liệu định tuyến chưa sẵn sàng. Hãy thử lại sau.");
+      throw new Error("Routing data is not ready. Try again later.");
     }
     if (!response.ok) {
       const error: unknown = await response.json().catch(() => null);
       requestSignal.throwIfAborted();
       switch (isObject(error) ? error.error_code : undefined) {
         case "SNAP_FAILED":
-          throw new Error("Có vị trí quá xa đường có thể định tuyến. Hãy đặt các marker gần đường hơn rồi thử lại.");
+          throw new Error("A location is too far from a routable road. Move the pin closer to a road and try again.");
         case "OUT_OF_COVERAGE":
-          throw new Error("Có vị trí ngoài phạm vi hỗ trợ. Hãy chỉnh vị trí rồi thử lại.");
+          throw new Error("A location is outside the supported area. Move the pin and try again.");
         case "INVALID_COORDINATES":
-          throw new Error("Thông tin vị trí không hợp lệ. Hãy kiểm tra lại tọa độ A–D.");
+          throw new Error("Invalid locations. Check the coordinates for A–D.");
         case "INVALID_PARAMETERS":
-          throw new Error("Tham số tìm điểm gặp không hợp lệ. Hãy kiểm tra mức công bằng và giới hạn thời gian.");
+          throw new Error("Invalid search settings. Check the values in the search options.");
         default:
-          throw new Error("Backend không tính được điểm gặp. Hãy thử lại.");
+          throw new Error("The server could not find a spot. Try again.");
       }
     }
     const payload: unknown = await response.json();
@@ -213,9 +221,9 @@ async function postMeeting(
     return parseOutcome(payload, origins);
   } catch (error) {
     if (timeout.aborted && requestSignal.reason === timeout.reason) {
-      throw new Error("Tính điểm gặp quá lâu. Hãy thử lại.");
+      throw new Error("The search took too long. Try again.");
     }
-    if (error instanceof TypeError) throw new Error("Không kết nối được với backend. Hãy thử lại.");
+    if (error instanceof TypeError) throw new Error("Could not reach the server. Try again.");
     if (error instanceof SyntaxError) throw new Error(INVALID_MEETING_RESPONSE);
     throw error;
   }

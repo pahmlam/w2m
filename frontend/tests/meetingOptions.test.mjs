@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fairnessAtStep, parseTravelLimit } from "../utils/meetingOptions.ts";
+import { fairnessAtStep, parseSpacing, parseTravelLimit } from "../utils/meetingOptions.ts";
+
+test("spacing accepts fractional meters and validates the configured boundaries", () => {
+  const range = { min: 0, max: 5000 };
+  for (const value of ["0", "500.5", "5000"]) assert.equal(parseSpacing(value, range), Number(value));
+  for (const value of ["", "-1", "5000.1", "Infinity"]) assert.equal(parseSpacing(value, range), null);
+});
 
 test("accepts exact integer seconds at both API bounds and rejects invalid input", () => {
   const range = { min: 300, max: 7200 };
