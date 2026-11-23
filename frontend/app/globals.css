@@ -7,10 +7,17 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; }
-main { max-width: 840px; margin: 0 auto; padding: 80px 24px; }
-.eyebrow { font-size: 0.8rem; letter-spacing: 0.15em; }
-h1 { font-size: clamp(3rem, 10vw, 5rem); margin: 16px 0; }
-.intro { font-size: 1.4rem; line-height: 1.6; }
-section { margin-top: 40px; padding: 24px; border: 1px solid #bdccc2; border-radius: 12px; }
-h2 { font-size: 1.2rem; margin-top: 0; }
-p { line-height: 1.7; }
+main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+header p { margin: 4px 0 20px; }
+h1 { font-size: 2rem; margin: 0; }
+.map {
+  height: max(320px, 72dvh);
+  overflow: hidden;
+  border: 1px solid #bdccc2;
+  border-radius: 12px;
+  background: #e5ece7;
+}
+.map-status { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+.map-status p { margin: 0; }
+.map-status button { padding: 6px 12px; font: inherit; cursor: pointer; }
+.aoi-key { display: inline-block; width: 16px; border-top: 3px solid #07664d; }

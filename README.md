@@ -3,11 +3,9 @@
 Ứng dụng tìm điểm gặp cho 4 người trên mạng đường có hướng tại Hà Nội, dựa trên
 thời gian di chuyển và mức ưu tiên công bằng của cả nhóm.
 
-**Hiện trạng ngày 2026-11-14:** M0 và M1 hoàn thành local trên AOI kỹ thuật Vành đai 3. Bundle 3 km có 149.213 node, 290.952 cạnh, 96.410 ứng viên;
-TC-15 đạt 200/200 cặp khi đối chiếu buffer 6 km.
-API còn chờ tích hợp graph. Frontend là trang khởi tạo,
-chưa gọi backend hoặc hiển thị bản đồ.
-Thuật toán tìm điểm gặp, cache/rerank, Docker và nghiệm thu MVP chưa hoàn thành.
+Backend đã hỗ trợ định tuyến CSR, tìm điểm gặp và rerank trên bundle Vành đai 3.
+Frontend hiển thị bản đồ và phạm vi hỗ trợ từ backend. Xem tiến độ triển khai
+tại [kế hoạch MVP](docs/plans/W2M-MVP-Plan.md).
 
 ## Yêu cầu và cài đặt
 
@@ -38,7 +36,8 @@ roundtrip tương ứng sẽ bị bỏ qua. Không cần sinh lại lockfile khi
 Terminal 1:
 
 ```sh
-uv run --project backend --locked uvicorn app.main:app --app-dir backend --reload --port 8000
+W2M_GRAPH_DIR=backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
+  uv run --project backend --locked uvicorn app.main:app --app-dir backend --reload --port 8000
 ```
 
 Terminal 2:
@@ -49,6 +48,26 @@ npm --prefix frontend run dev
 
 - Frontend: `http://localhost:3000`.
 - Swagger/OpenAPI: `http://localhost:8000/docs`.
+
+Trang chính tải AOI từ `GET /api/v1/map/config` và căn bản đồ theo phạm vi này.
+Nếu graph chưa sẵn sàng, bấm **Thử lại** sau khi `GET /ready` trả 200.
+
+### Bản đồ nền local
+
+Mặc định, trình duyệt dùng raster OpenStreetMap Standard qua HTTPS và hiển thị
+ghi công OpenStreetMap trực tiếp trên bản đồ. Nguồn này dành cho xem thử tương
+tác với lưu lượng thấp, cần Internet và có thể bị giới hạn hoặc gián đoạn. Giữ
+Referer và cache HTTP của trình duyệt. Không tải hàng loạt, tải trước hay dùng
+tile này để chạy offline.
+[Điều khoản sử dụng tile OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/)
+
+Đặt `NEXT_PUBLIC_MAP_STYLE_URL` trong `frontend/.env.local` để dùng style JSON
+của nhà cung cấp khác. Khi trường style để trống, có thể đổi raster bằng
+`NEXT_PUBLIC_MAP_TILE_URL` theo mẫu `{z}/{x}/{y}`. Nếu nhà cung cấp raster yêu
+cầu ghi công riêng, dùng style JSON khai báo `attribution` của nguồn đó. Khởi
+động lại frontend sau khi đổi cấu hình.
+
+### API local
 
 | Endpoint | Hành vi hiện tại |
 |---|---|
@@ -83,6 +102,7 @@ uv run --project backend --locked --extra data pytest backend/tests
 npm --prefix frontend run lint
 npm --prefix frontend run typecheck
 npm --prefix frontend run build
+node --test frontend/tests/mapConfig.test.mjs
 ```
 
 Test backend dùng fixture cố định và OSMnx giả lập cho bước tải; không gọi OSM hoặc
