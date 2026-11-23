@@ -1,6 +1,6 @@
 """Directed shortest paths over a request-local CSR overlay."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from math import isfinite
 from time import perf_counter_ns
@@ -47,10 +47,28 @@ class CSRRoutingResult:
     dijkstra_ms: float = field(default=0.0, compare=False)
 
 
+type SourceLookup = Callable[[CSRGraph, SnapResult, float], CSRSourcePaths | None]
+
+
+def _reuse_paths(
+    cached: CSRSourcePaths, source_index: int, cutoff_seconds: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    distances, predecessors = cached.distances_seconds, cached.predecessors
+    if cutoff_seconds < cached.network_cutoff_seconds:
+        within_cutoff = distances <= cutoff_seconds
+        distances = np.where(within_cutoff, distances, np.inf)
+        predecessors = np.where(within_cutoff, predecessors, NO_PREDECESSOR)
+    if source_index != cached.source_index:
+        # Temporary source rows move when an earlier origin changes its snap type.
+        predecessors = np.where(predecessors == cached.source_index, source_index, predecessors)
+    return distances, predecessors
+
+
 def route_csr_origins(
     graph: CSRGraph, snaps: Sequence[SnapResult], max_travel_seconds: float,
+    *, get_cached_source: SourceLookup | None = None,
 ) -> CSRRoutingResult:
-    """Compute one directed search per snapped source using its access-adjusted cutoff."""
+    """Reuse covered paths or run a directed search with the source's network cutoff."""
     if (isinstance(max_travel_seconds, bool) or not isfinite(max_travel_seconds)
             or max_travel_seconds < 0):
         raise ValueError("Travel cutoff must be finite and non-negative")
@@ -66,13 +84,18 @@ def route_csr_origins(
             distances = np.full(node_count, np.inf)
             predecessors = np.full(node_count, NO_PREDECESSOR, dtype=np.int32)
         else:
-            distances, predecessors = dijkstra(
-                overlay.csr, directed=True, indices=source, limit=cutoff,
-                return_predecessors=True,
-            )
-        sources.append(CSRSourcePaths(
-            snap, source, cutoff, distances[:node_count], predecessors[:node_count],
-        ))
+            cached = get_cached_source(graph, snap, cutoff) if get_cached_source else None
+            if cached is not None:
+                distances, predecessors = _reuse_paths(cached, source, cutoff)
+            else:
+                distances, predecessors = dijkstra(
+                    overlay.csr, directed=True, indices=source, limit=cutoff,
+                    return_predecessors=True,
+                )
+        distances, predecessors = distances[:node_count], predecessors[:node_count]
+        distances.setflags(write=False)
+        predecessors.setflags(write=False)
+        sources.append(CSRSourcePaths(snap, source, cutoff, distances, predecessors))
     return CSRRoutingResult(
         graph, overlay, tuple(sources), max_travel_seconds, (perf_counter_ns() - started) / 1e6,
     )

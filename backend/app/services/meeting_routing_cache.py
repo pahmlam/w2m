@@ -3,8 +3,14 @@
 import asyncio
 from collections import OrderedDict
 from dataclasses import dataclass
+from threading import Lock
+from time import monotonic
 
-from app.services.csr_shortest_path import CSRRoutingResult
+from app.services.coordinate_snapper import SnapResult
+from app.services.csr_shortest_path import CSRRoutingResult, CSRSourcePaths
+from app.services.graph_loader import CSRGraph
+
+type _SourceLocation = tuple[str, str, tuple[int, int, int], float, tuple[float, float]]
 
 # Allow for the small Python objects and temporary-source rows in a request.
 ENTRY_OVERHEAD_BYTES = 8192
@@ -13,7 +19,9 @@ ENTRY_OVERHEAD_BYTES = 8192
 @dataclass(frozen=True)
 class _Entry:
     routing: CSRRoutingResult
+    sources: dict[tuple[_SourceLocation, float], CSRSourcePaths]
     size_bytes: int
+    expires_at: float
     expiry: asyncio.TimerHandle
 
 
@@ -25,8 +33,15 @@ def _routing_size_bytes(routing: CSRRoutingResult) -> int:
     return ENTRY_OVERHEAD_BYTES + sum(array.nbytes for array in arrays)
 
 
+def _source_location(graph: CSRGraph, snap: SnapResult) -> _SourceLocation:
+    return (
+        graph.graph_version, graph.weight_profile_version,
+        snap.edge_id, snap.theta, snap.snapped_xy,
+    )
+
+
 class MeetingRoutingCache:
-    """Use from the owning event loop so reads, writes, and expiry stay atomic."""
+    """Manage expiry on the event loop and share read-only paths with routing workers."""
 
     def __init__(self, *, ttl_seconds: int, max_bytes: int) -> None:
         self._loop = asyncio.get_running_loop()
@@ -34,36 +49,64 @@ class MeetingRoutingCache:
         self._max_bytes = max_bytes
         self._entries: OrderedDict[str, _Entry] = OrderedDict()
         self._size_bytes = 0
+        self._lock = Lock()
 
     def put(self, request_id: str, routing: CSRRoutingResult) -> None:
         """Store the full routing result under its response ID if it fits."""
         size_bytes = _routing_size_bytes(routing)
-        self._remove(request_id)
-        if size_bytes > self._max_bytes:
-            return
-        while self._size_bytes + size_bytes > self._max_bytes:
-            self._remove(next(iter(self._entries)))
-        expiry = self._loop.call_later(self._ttl_seconds, self._remove, request_id)
-        self._entries[request_id] = _Entry(routing, size_bytes, expiry)
-        self._size_bytes += size_bytes
+        with self._lock:
+            self._remove(request_id)
+            if size_bytes > self._max_bytes:
+                return
+            while self._size_bytes + size_bytes > self._max_bytes:
+                self._remove(next(iter(self._entries)))
+            sources = {
+                (_source_location(routing.graph, paths.snap), paths.network_cutoff_seconds): paths
+                for paths in routing.sources
+            }
+            expires_at = monotonic() + self._ttl_seconds
+            expiry = self._loop.call_later(self._ttl_seconds, self._expire, request_id)
+            self._entries[request_id] = _Entry(routing, sources, size_bytes, expires_at, expiry)
+            self._size_bytes += size_bytes
 
     def get(self, request_id: str) -> CSRRoutingResult | None:
         """Retrieve current tables and refresh recency without extending expiry."""
-        entry = self._entries.get(request_id)
-        if entry is None:
-            return None
-        if entry.expiry.when() <= self._loop.time():
-            self._remove(request_id)
-            return None
-        self._entries.move_to_end(request_id)
-        return entry.routing
+        with self._lock:
+            entry = self._entries.get(request_id)
+            if entry is None:
+                return None
+            if entry.expires_at <= monotonic():
+                self._remove(request_id)
+                return None
+            self._entries.move_to_end(request_id)
+            return entry.routing
+
+    def get_source(
+        self, graph: CSRGraph, snap: SnapResult, cutoff_seconds: float,
+    ) -> CSRSourcePaths | None:
+        """Find an exact source in a live request whose search covered this cutoff."""
+        location = _source_location(graph, snap)
+        with self._lock:
+            now = monotonic()
+            for entry in reversed(self._entries.values()):
+                if entry.routing.graph is not graph or entry.expires_at <= now:
+                    continue
+                for (cached_location, cached_cutoff), source in entry.sources.items():
+                    if cached_location == location and cached_cutoff >= cutoff_seconds:
+                        return source
+        return None
 
     def clear(self) -> None:
         """Release all results and cancel their expiry callbacks on shutdown."""
-        for entry in self._entries.values():
-            entry.expiry.cancel()
-        self._entries.clear()
-        self._size_bytes = 0
+        with self._lock:
+            for entry in self._entries.values():
+                entry.expiry.cancel()
+            self._entries.clear()
+            self._size_bytes = 0
+
+    def _expire(self, request_id: str) -> None:
+        with self._lock:
+            self._remove(request_id)
 
     def _remove(self, request_id: str) -> None:
         entry = self._entries.pop(request_id, None)

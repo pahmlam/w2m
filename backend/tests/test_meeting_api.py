@@ -3,6 +3,7 @@
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
 from uuid import UUID
 
 import pytest
@@ -12,7 +13,8 @@ from test_csr_graph_loader import csr_bundle as csr_bundle
 
 from app.config.settings import Settings
 from app.main import create_app
-from app.models.requests import Optimization
+from app.models.requests import MeetingRequest, Optimization
+from app.services import csr_shortest_path
 
 MEETING_URL = "/api/v1/meeting-points"
 ORIGIN_IDS = ("visitor-1", "visitor-2", "visitor-3", "visitor-4")
@@ -248,6 +250,66 @@ def test_rerank_conflicts_on_missing_id_or_graph_change(meeting_client: TestClie
     stale = meeting_client.post(url, json=options)
     assert stale.status_code == 409
     assert stale.json()["error_code"] == "RECOMPUTE_REQUIRED"
+
+
+def test_new_request_reuses_unchanged_sources_after_a_move(
+    meeting_client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    origins = []
+    for origin_id, x in zip(ORIGIN_IDS, (500004, 500008, 500012, 500016), strict=True):
+        lon, lat = TO_WGS84.transform(x, 2300000)
+        origins.append({"id": origin_id, "lon": lon, "lat": lat})
+    lon, lat = TO_WGS84.transform(500000, 2300000)
+    moved = [{"id": ORIGIN_IDS[0], "lon": lon, "lat": lat}, *origins[1:]]
+    changed = {"origins": moved, "optimization": {"max_travel_seconds": 300}}
+    with TestClient(create_app()) as cold_client:
+        reference = cold_client.post(MEETING_URL, json=changed)
+        assert reference.status_code == 200
+
+    initial = meeting_client.post(MEETING_URL, json={
+        "origins": origins, "optimization": {"max_travel_seconds": 600},
+    })
+    assert initial.status_code == 200
+    dijkstra = Mock(wraps=csr_shortest_path.dijkstra)
+    monkeypatch.setattr(csr_shortest_path, "dijkstra", dijkstra)
+    updated = meeting_client.post(MEETING_URL, json=changed)
+    assert updated.status_code == 200
+    assert [call.kwargs["indices"] for call in dijkstra.call_args_list] == [0]
+    assert updated.json()["request_id"] != initial.json()["request_id"]
+    assert updated.json()["results"] == reference.json()["results"]
+    assert updated.json()["origins"] == reference.json()["origins"]
+
+    dijkstra.reset_mock()
+    longer = meeting_client.post(MEETING_URL, json={
+        "origins": moved, "optimization": {"max_travel_seconds": 900},
+    })
+    assert longer.status_code == 200
+    assert [call.kwargs["indices"] for call in dijkstra.call_args_list] == [0, 2, 3, 4]
+
+
+def test_internal_error_keeps_coordinates_out_of_response_and_logs(
+    meeting_client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    latitude = 20.800123456
+    longitude = 105.000654321
+
+    async def fail(body: MeetingRequest) -> None:
+        raise RuntimeError(f"Could not process {body.origins[0]}")
+
+    monkeypatch.setattr(meeting_client.app.state.csr_meeting_service, "compute_request", fail)
+    response = meeting_client.post(MEETING_URL, json={"origins": [
+        {"id": origin_id, "lat": latitude, "lon": longitude} for origin_id in ORIGIN_IDS
+    ]}, headers={"Origin": "http://localhost:3000"})
+
+    assert response.status_code == 500
+    assert response.json()["error_code"] == "INTERNAL_ERROR"
+    request_id = response.headers["X-Request-ID"]
+    assert response.json()["request_id"] == request_id
+    assert response.headers["Access-Control-Allow-Origin"] == "http://localhost:3000"
+    assert response.headers["Access-Control-Expose-Headers"] == "X-Request-ID"
+    assert request_id in caplog.text
+    assert all(str(value) not in response.text and str(value) not in caplog.text
+               for value in (latitude, longitude))
 
 
 @pytest.mark.parametrize(("lon", "lat", "code"), [

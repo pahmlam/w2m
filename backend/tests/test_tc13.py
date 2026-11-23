@@ -86,7 +86,8 @@ def test_tc13_shared_graph_unchanged_after_50_requests(
         graph = app.state.csr_graph
         origins = _sample_origins(graph)
         payloads = [MeetingRequest(origins=origins, optimization=Optimization(
-            phi=index / (REQUEST_COUNT - 1), max_travel_seconds=300, top_k=1, min_spacing_meters=500,
+            phi=index / (REQUEST_COUNT - 1), max_travel_seconds=300,
+            top_k=1, min_spacing_meters=500,
         )) for index in range(REQUEST_COUNT)]
         before = _graph_fingerprint(graph)
         assert client.portal is not None

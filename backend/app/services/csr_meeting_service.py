@@ -15,6 +15,7 @@ from app.services.meeting_optimizer import (
     rank_candidates,
     select_candidates,
 )
+from app.services.meeting_routing_cache import MeetingRoutingCache
 
 
 @dataclass(frozen=True)
@@ -39,9 +40,11 @@ class CSRMeetingService:
     def __init__(
         self, graph: CSRGraph, max_concurrent_tasks: int,
         *, snapper: CoordinateSnapper[CSRGraph] | None = None,
+        routing_cache: MeetingRoutingCache | None = None,
     ) -> None:
         self._graph = graph
         self._snapper = snapper
+        self._routing_cache = routing_cache
         self._executor = ThreadPoolExecutor(
             max_workers=max_concurrent_tasks, thread_name_prefix="w2m-csr",
         )
@@ -90,7 +93,10 @@ class CSRMeetingService:
         self, snaps: tuple[SnapResult, ...], optimization: Optimization,
         started: int, snap_end: int,
     ) -> CSRMeetingComputation:
-        routing = route_csr_origins(self._graph, snaps, optimization.max_travel_seconds)
+        routing = route_csr_origins(
+            self._graph, snaps, optimization.max_travel_seconds,
+            get_cached_source=self._routing_cache.get_source if self._routing_cache else None,
+        )
         return self._rank_and_build(
             routing, optimization, started,
             snap_ms=(snap_end - started) / 1e6, dijkstra_ms=routing.dijkstra_ms,

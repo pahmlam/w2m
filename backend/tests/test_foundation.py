@@ -1,3 +1,5 @@
+import json
+
 import networkx as nx
 import pytest
 from fastapi.testclient import TestClient
@@ -67,13 +69,30 @@ def test_liveness_and_readiness_are_distinct(meeting_payload):
         assert response.headers["X-Request-ID"] == response.json()["request_id"]
 
 
-def test_validation_does_not_echo_coordinates(meeting_payload):
-    meeting_payload["origins"][0]["lat"] = 91.123456
+@pytest.mark.parametrize("value", [91.123456, "21.03123456", float("nan"), float("inf")])
+def test_validation_does_not_echo_coordinates(meeting_payload, value, caplog):
+    meeting_payload["origins"][0]["lat"] = value
     with TestClient(create_app()) as client:
-        response = client.post("/api/v1/meeting-points", json=meeting_payload)
+        response = client.post("/api/v1/meeting-points", content=json.dumps(meeting_payload),
+                               headers={"Content-Type": "application/json"})
     assert response.status_code == 400
     assert response.json()["error_code"] == "INVALID_COORDINATES"
-    assert "91.123456" not in response.text
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
+    assert json.dumps(value) not in response.text
+    assert str(value) not in caplog.text
+
+
+@pytest.mark.parametrize("optimization", [{"top_k": 6}, {"lat": 21.012345678}])
+def test_create_and_rerank_share_parameter_error_contract(meeting_payload, optimization):
+    with TestClient(create_app()) as client:
+        for url, payload in (
+            ("/api/v1/meeting-points", {**meeting_payload, "optimization": optimization}),
+            ("/api/v1/meeting-points/example/rerank", {"optimization": optimization}),
+        ):
+            response = client.post(url, json=payload)
+            assert response.status_code == 400
+            assert response.json()["error_code"] == "INVALID_PARAMETERS"
+            assert response.json()["request_id"] == response.headers["X-Request-ID"]
 
 
 def test_settings_reject_nonpositive_access_speed():
@@ -90,9 +109,9 @@ def test_runtime_defaults_are_shared_with_rerank(monkeypatch, meeting_payload):
 
 def test_parameter_errors_and_unavailable_endpoints(meeting_payload):
     with TestClient(create_app()) as client:
-        response = client.post("/api/v1/meeting-points", json={
-            **meeting_payload, "optimization": {"top_k": 6},
-        })
+        response = client.post(
+            "/api/v1/meeting-points", json={**meeting_payload, "travel_mode": "bike"},
+        )
         assert response.status_code == 400
         assert response.json()["error_code"] == "INVALID_PARAMETERS"
         assert client.get("/api/v1/map/config").status_code == 503
