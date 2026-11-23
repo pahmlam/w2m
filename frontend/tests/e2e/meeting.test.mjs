@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
 
-const frontendUrl = "http://localhost:3000";
+const frontendUrl = process.env.W2M_E2E_FRONTEND_URL ?? "http://localhost:3000";
 const meetingPath = "/api/v1/meeting-points";
 const mapConfigPath = "/api/v1/map/config";
 const graphVersion = "hanoi-ring3-car-v1-3000-v1";
@@ -26,6 +26,9 @@ after(async () => browser?.close());
 async function openPage(t) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 920 } });
   t.after(() => context.close());
+  await context.route("https://tiles.openfreemap.org/styles/positron", route => route.fulfill({
+    json: { version: 8, sources: {}, layers: [] },
+  }));
   await context.route(/\/\d+\/\d+\/\d+(?:@2x)?\.png(?:\?|$)/, route => route.fulfill({
     contentType: "image/png", body: tile,
   }));

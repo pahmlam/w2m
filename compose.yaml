@@ -1,0 +1,40 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      W2M_GRAPH_DIR: /graph
+      W2M_CORS_ORIGINS: '["http://localhost:${W2M_FRONTEND_PORT:-3000}"]'
+    volumes:
+      - type: bind
+        source: ${W2M_GRAPH_BUNDLE:-./backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated}
+        target: /graph
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:${W2M_BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${W2M_BACKEND_PORT:-8000}
+        NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL-https://tiles.openfreemap.org/styles/positron}
+        NEXT_PUBLIC_MAP_TILE_URL: ${NEXT_PUBLIC_MAP_TILE_URL:-}
+        NEXT_PUBLIC_MAP_TILE_ATTRIBUTION: ${NEXT_PUBLIC_MAP_TILE_ATTRIBUTION-OpenFreeMap © OpenMapTiles}
+        NEXT_PUBLIC_MAP_TILE_ATTRIBUTION_URL: ${NEXT_PUBLIC_MAP_TILE_ATTRIBUTION_URL-https://openfreemap.org/}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${W2M_FRONTEND_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      start_period: 10s

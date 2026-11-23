@@ -7,6 +7,37 @@ Backend đã hỗ trợ định tuyến CSR, tìm điểm gặp và rerank trên
 Frontend hiển thị bản đồ và phạm vi hỗ trợ từ backend. Xem tiến độ triển khai
 tại [kế hoạch MVP](docs/plans/W2M-MVP-Plan.md).
 
+## Chạy local bằng Docker Compose
+
+Cần Docker có Compose v2 và thư mục `validated` của bundle Vành đai 3
+`hanoi-ring3-car-v1-3000-v1`. Compose dùng bundle trong
+`backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated` mặc định. Nếu bundle
+nằm ở nơi khác, đặt `W2M_GRAPH_BUNDLE` thành đường dẫn tới thư mục đó. Chuẩn bị
+bundle theo [pipeline offline](#pipeline-dữ-liệu-offline--m1) trước khi chạy.
+
+```sh
+docker compose up --build --detach --wait
+curl --fail http://localhost:8000/ready
+docker compose ps
+```
+
+Mở `http://localhost:3000`, đặt bốn vị trí trong AOI và bấm **Find a spot**.
+Chọn một điểm gặp để xem bốn tuyến A–D. Hai cổng chỉ mở trên máy local.
+Nếu cổng đã được dùng, chạy lệnh khởi động với
+`W2M_FRONTEND_PORT=3001 W2M_BACKEND_PORT=8001` ở trước lệnh và dùng các cổng
+tương ứng trong trình duyệt. Compose ghép URL API và CORS từ hai cổng này.
+
+Backend kiểm tra metadata và checksum khi nạp bundle được mount chỉ đọc.
+Frontend khởi động sau khi `/ready` trả 200. Nếu quá trình chờ lỗi, chạy
+`docker compose logs backend` để kiểm tra bundle và quyền đọc. Dùng
+`docker compose down` để dừng hai dịch vụ.
+
+Bản đồ nền mặc định dùng OpenFreeMap Positron. Để đổi nguồn tile cho Docker,
+đặt các biến `NEXT_PUBLIC_MAP_*` trong môi trường shell hoặc `.env` ở thư mục gốc,
+rồi chạy lại `docker compose up --build --detach --wait`. Với tile raster, đặt
+`NEXT_PUBLIC_MAP_STYLE_URL=` và điền URL tile cùng ghi công nhà cung cấp theo
+[tài liệu nguồn tile](docs/plans/W2M-M6-Tile-Provider.md).
+
 ## Yêu cầu và cài đặt
 
 Cần Python 3.12, uv và Node.js 22/npm. Chạy các lệnh dưới đây từ thư mục gốc repo
@@ -109,7 +140,9 @@ lint/typecheck/build; hiện chưa cài extra `data`, nên không kiểm tra to�
 
 ### E2E M5 với bundle Vành đai 3
 
-Chạy backend và frontend theo mục **Chạy development**, rồi chạy các lệnh sau.
+Khởi động backend và frontend bằng Compose hoặc theo mục **Chạy development**,
+rồi chạy các lệnh sau. Nếu dùng cổng frontend khác, đặt
+`W2M_E2E_FRONTEND_URL` thành URL frontend thực tế.
 Chromium chỉ cần cài một lần. Bộ E2E dùng graph thật, chặn tile ngoài và mô phỏng
 lỗi mạng cùng phản hồi đến muộn.
 
@@ -118,13 +151,13 @@ npm --prefix frontend exec -- playwright install chromium --only-shell
 npm --prefix frontend run test:e2e
 ```
 
-Bằng chứng local gần nhất:
+Bằng chứng local trước M5:
 
 - Backend: Ruff và **276 test đạt**, không bỏ qua, sau bước xuất CSR
   ngày 2026-11-11. Còn 58 cảnh báo deprecation Shapely/TestClient.
 - Frontend: người phát triển đã xác nhận install/audit (0 vulnerabilities),
   lint/typecheck/build và trang chủ hoạt động ở M0; chưa chạy lại trong các task M1.
-- Remote CI, frontend E2E và benchmark MVP chưa được xác minh.
+- Remote CI và benchmark MVP chưa được xác minh.
 
 ## Pipeline dữ liệu offline — M1
 
