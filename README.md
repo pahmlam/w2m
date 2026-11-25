@@ -1,16 +1,121 @@
-# W2M — Where to meet
+<div align="center">
 
-Ứng dụng tìm điểm gặp cho 4 người trên mạng đường có hướng tại Hà Nội, dựa trên
-thời gian di chuyển và mức ưu tiên công bằng của cả nhóm.
+# W2M
 
-Backend đã hỗ trợ định tuyến CSR, tìm điểm gặp và rerank trên bundle Vành đai 3.
-Frontend hiển thị bản đồ và phạm vi hỗ trợ từ backend. Xem tiến độ triển khai
-tại [kế hoạch MVP](docs/plans/W2M-MVP-Plan.md).
+### WHERE TO MEET
+
+**Bốn người. Một điểm gặp. Cân bằng thời gian di chuyển.**
+
+Ứng dụng tìm điểm gặp cho 4 người trên mạng đường có hướng tại Hà Nội,<br>
+dựa trên thời gian di chuyển và mức ưu tiên công bằng của cả nhóm.
+
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=flat-square&logo=fastapi&logoColor=white)
+![Node.js 22](https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)
+
+[Giao diện](#giao-diện-ứng-dụng) · [Chạy ngay](#chạy-local-bằng-docker-compose) · [Kiến trúc](#kiến-trúc-hệ-thống) · [API](#api-local) · [Kiểm thử](#kiểm-thử) · [Kế hoạch MVP](docs/plans/W2M-MVP-Plan.md)
+
+</div>
+
+---
+
+## Giao diện ứng dụng
+
+<div align="center">
+  <img src="figures/image.png" alt="Giao diện W2M với bản đồ Hà Nội, bốn vị trí bạn bè và thanh điều chỉnh mức độ công bằng" width="100%">
+  <br>
+  <sub>W2M — Bản đồ phạm vi hỗ trợ tại Hà Nội, bảng chọn bốn người và các tùy chọn tìm điểm gặp.</sub>
+</div>
+
+## Tổng quan
+
+**W2M (Where to meet)** không chỉ tìm một vị trí trên bản đồ: hệ thống tìm điểm gặp dựa trên thời gian đi theo mạng đường và mức ưu tiên công bằng giữa bốn người.
+
+Backend đã hỗ trợ định tuyến CSR, tìm điểm gặp và rerank trên bundle Vành đai 3. Frontend hiển thị bản đồ và phạm vi hỗ trợ từ backend. Xem tiến độ triển khai tại [kế hoạch MVP](docs/plans/W2M-MVP-Plan.md).
+
+| Khả năng | Mô tả |
+| :--- | :--- |
+| **Điểm gặp cho nhóm** | Đặt bốn vị trí A–D trong AOI và nhận danh sách điểm gặp theo thứ hạng. |
+| **Định tuyến có hướng** | Tính thời gian di chuyển trên đồ thị đường bộ với profile ô tô `car-v1`. |
+| **Cân bằng thời gian** | Xếp hạng điểm gặp bằng OWA theo mức ưu tiên công bằng của nhóm. |
+| **Rerank từ cache** | Xếp hạng lại từ bảng đã tính; yêu cầu tính mới khi cache không còn phù hợp. |
+| **Trực quan hóa bản đồ** | Hiển thị phạm vi hỗ trợ, vị trí người dùng và bốn tuyến đường tới điểm gặp. |
+| **Dữ liệu offline có phiên bản** | Nạp bundle CSR đã validation, kiểm tra metadata và checksum khi startup. |
+
+### Kết quả kiểm tra nổi bật
+
+| Backend | Frontend | TC-15 | TC-16 | Benchmark M6 |
+| :---: | :---: | :---: | :---: | :---: |
+| **471** | **29** | **200/200** | **1.000/1.000** | **10/10** |
+| test đạt | test đạt | cặp đạt | request đạt | điều kiện đạt |
+
+<sub>Số liệu từ hồ sơ kiểm tra local M6 ngày 25/11/2026, không phải trạng thái CI trực tiếp. Xem <a href="#hồ-sơ-kiểm-tra-m6">bằng chứng và cách tái lập</a>.</sub>
+
+## Kiến trúc hệ thống
+
+```mermaid
+flowchart TD
+    U["4 vị trí A–D"] --> F["Frontend · bản đồ & kết quả"]
+    F <-->|"HTTP API"| A["Backend · FastAPI"]
+    A --> R["Định tuyến CSR"]
+    R --> S["Lọc ứng viên · OWA · xếp hạng"]
+    S --> O["Điểm gặp & 4 tuyến đường"]
+    O --> A
+    S <-->|"Rerank"| C[("Cache RAM")]
+    subgraph Offline["Dữ liệu offline · M1"]
+        D["OpenStreetMap & AOI"] --> P["Pipeline dựng graph"]
+        P --> B[("Bundle CSR đã validation")]
+    end
+    B -->|"Nạp khi startup"| R
+    classDef input fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef core fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A
+    classDef data fill:#D1FAE5,stroke:#059669,color:#064E3B
+    class U,F input
+    class A,R,S,O core
+    class D,P,B,C data
+```
+
+| Thành phần | Công nghệ / dữ liệu |
+| :--- | :--- |
+| Frontend | TypeScript, Node.js 22, MapLibre style / raster tiles |
+| Backend | Python 3.12, FastAPI, Uvicorn, CSR |
+| Dữ liệu không gian | OpenStreetMap, OSMnx, GeoPandas, GeoJSON, GraphML |
+| Mô hình tối ưu | Mạng đường có hướng, profile `car-v1`, OWA |
+| Vận hành và kiểm thử | Docker Compose v2, uv, Ruff, pytest, Playwright |
+
+<details>
+<summary><strong>Mục lục đầy đủ</strong></summary>
+
+- [Giao diện ứng dụng](#giao-diện-ứng-dụng)
+- [Chạy local bằng Docker Compose](#chạy-local-bằng-docker-compose)
+  - [Thay đồ thị và xử lý lỗi](#thay-đồ-thị-và-xử-lý-lỗi)
+- [Yêu cầu và cài đặt](#yêu-cầu-và-cài-đặt)
+- [Chạy development](#chạy-development)
+  - [Bản đồ nền local](#bản-đồ-nền-local)
+  - [API local](#api-local)
+- [Kiểm thử](#kiểm-thử)
+  - [E2E M5 với bundle Vành đai 3](#e2e-m5-với-bundle-vành-đai-3)
+- [Pipeline dữ liệu offline — M1](#pipeline-dữ-liệu-offline--m1)
+- [Kiểm tra prototype tham chiếu M2](#kiểm-tra-prototype-tham-chiếu-m2)
+- [Đối chiếu TC-16](#đối-chiếu-tc-16)
+- [Benchmark API trên Docker (M6)](#benchmark-api-trên-docker-m6)
+- [Hồ sơ kiểm tra M6](#hồ-sơ-kiểm-tra-m6)
+- [Giới hạn mô hình](#giới-hạn-mô-hình)
+- [Cấu trúc mã nguồn](#cấu-trúc-mã-nguồn)
+
+</details>
+
+---
 
 ## Chạy local bằng Docker Compose
 
-Cần Docker có Compose v2 và thư mục `validated` của bundle Vành đai 3
-`hanoi-ring3-car-v1-3000-v1`. Compose dùng bundle trong
+> [!IMPORTANT]
+> Cần Docker có Compose v2 và thư mục `validated` của bundle Vành đai 3
+> `hanoi-ring3-car-v1-3000-v1`.
+
+Compose dùng bundle trong
 `backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated` mặc định. Nếu bundle
 nằm ở nơi khác, đặt `W2M_GRAPH_BUNDLE` thành đường dẫn tới thư mục đó. Chuẩn bị
 bundle theo [pipeline offline](#pipeline-dữ-liệu-offline--m1) trước khi chạy.
@@ -21,8 +126,19 @@ curl --fail http://localhost:8000/ready
 docker compose ps
 ```
 
-Mở `http://localhost:3000`, đặt bốn vị trí trong AOI và bấm **Find a spot**.
-Chọn một điểm gặp để xem bốn tuyến A–D. Hai cổng chỉ mở trên máy local.
+**Bắt đầu sử dụng**
+
+1. Mở [http://localhost:3000](http://localhost:3000).
+2. Đặt bốn vị trí A–D trong AOI và bấm **Find a spot**.
+3. Chọn một điểm gặp để xem bốn tuyến A–D.
+
+| Dịch vụ | Địa chỉ local |
+| :--- | :--- |
+| Frontend | [localhost:3000](http://localhost:3000) |
+| Backend readiness | [localhost:8000/ready](http://localhost:8000/ready) |
+| Swagger / OpenAPI | [localhost:8000/docs](http://localhost:8000/docs) |
+
+Hai cổng chỉ mở trên máy local.
 Nếu cổng đã được dùng, chạy lệnh khởi động với
 `W2M_FRONTEND_PORT=3001 W2M_BACKEND_PORT=8001` ở trước lệnh và dùng các cổng
 tương ứng trong trình duyệt. Compose ghép URL API và CORS từ hai cổng này.
@@ -63,6 +179,8 @@ rồi chạy lại `docker compose up --build --detach --wait`. Với tile raste
 `NEXT_PUBLIC_MAP_STYLE_URL=` và điền URL tile cùng ghi công nhà cung cấp theo
 [tài liệu nguồn tile](docs/plans/W2M-M6-Tile-Provider.md).
 
+---
+
 ## Yêu cầu và cài đặt
 
 Cần Python 3.12, uv và Node.js 22/npm. Chạy các lệnh dưới đây từ thư mục gốc repo
@@ -87,9 +205,11 @@ Extra `data` cung cấp OSMnx/GeoPandas cho các CLI offline và test roundtrip 
 Nếu chỉ chạy API nền tảng, có thể bỏ `--extra data`; khi không có OSMnx, các test
 roundtrip tương ứng sẽ bị bỏ qua. Không cần sinh lại lockfile khi cài đặt thông thường.
 
+---
+
 ## Chạy development
 
-Terminal 1:
+**Terminal 1 — Backend**
 
 ```sh
 W2M_GRAPH_DIR=backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
@@ -97,7 +217,7 @@ W2M_GRAPH_DIR=backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
   --no-access-log
 ```
 
-Terminal 2:
+**Terminal 2 — Frontend**
 
 ```sh
 npm --prefix frontend run dev
@@ -165,6 +285,8 @@ curl -i http://localhost:8000/ready
 curl -i http://localhost:8000/api/v1/map/config
 ```
 
+---
+
 ## Kiểm thử
 
 ```sh
@@ -173,7 +295,7 @@ uv run --project backend --locked --extra data pytest backend/tests
 npm --prefix frontend run lint
 npm --prefix frontend run typecheck
 npm --prefix frontend run build
-node --test frontend/tests/*.test.mjs
+node --test frontend/tests/***.test.mjs
 ```
 
 Test backend dùng fixture cố định và OSMnx giả lập cho bước tải; không gọi OSM hoặc
@@ -196,7 +318,29 @@ npm --prefix frontend run test:e2e
 
 Xem [hồ sơ kiểm tra M6](#hồ-sơ-kiểm-tra-m6) để lưu báo cáo của lần chạy hiện tại.
 
+---
+
 ## Pipeline dữ liệu offline — M1
+
+```mermaid
+flowchart TD
+    A["01 · AOI & buffer"] --> B["02 · Snapshot OSM"]
+    B --> C["03 · Geometry EPSG:32648"]
+    C --> D["04 · Trọng số car-v1"]
+    D --> E["05 · SCC lớn nhất"]
+    E --> F["06 · Cặp cạnh ngược"]
+    F --> G["07 · Chia cạnh & cắt biên AOI"]
+    G --> H["08 · Ứng viên điểm gặp"]
+    H --> I["09 · CSR & ánh xạ"]
+    I --> J["10 · Validation & metadata"]
+    classDef start fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef finish fill:#D1FAE5,stroke:#059669,color:#064E3B
+    class A,B start
+    class I,J finish
+```
+
+<details>
+<summary><strong>Chi tiết tên CLI và đầu ra của từng bước</strong></summary>
 
 ```text
 Polygon AOI nguồn
@@ -211,6 +355,8 @@ Polygon AOI nguồn
   → prepare_graph_csr        → CSR, ánh xạ node/cung và geometry có phiên bản
   → validate_graph           → báo cáo validation và metadata đầy đủ
 ```
+
+</details>
 
 Mỗi CLI chạy riêng; các bước truyền dữ liệu qua file, không tự gọi bước kế tiếp.
 Chỉ `download_osm` tải OSM qua mạng. API và startup không gọi các CLI này.
@@ -228,8 +374,11 @@ Chỉ `download_osm` tải OSM qua mạng. API và startup không gọi các CLI
 | Gắn cờ ứng viên | `candidates/drive-20261106T092834Z-car-v1-candidates-v1/` | 2.504 ứng viên, gồm 50 node trên biên AOI |
 | CSR | `csr/hanoi-pilot-car-v1-csr-v1/` | 20.221 node, 35.556 cung; đối chiếu NetworkX từ 20 nguồn đạt |
 
-Artifact lớn được Git ignore; chúng không có sẵn chỉ nhờ clone repo. Nếu đã có
-snapshot local ở trên thì tái sử dụng, không cần tải OSM lại. Snapshot có cutoff
+> [!NOTE]
+> Artifact lớn được Git ignore; chúng không có sẵn chỉ nhờ clone repo. Nếu đã có
+> snapshot local ở trên thì tái sử dụng, không cần tải OSM lại.
+
+Snapshot có cutoff
 `2026-11-06T09:28:34Z`; các bước sau lưu checksum và metadata để truy vết.
 
 AOI `hanoi-pilot-v1` là hình chữ nhật WGS84 `[105.84, 21.02, 105.86, 21.04]`,
@@ -237,6 +386,11 @@ khoảng 4,60 km²; routing area sau buffer 3.000 m khoảng 58,62 km². Đây l
 kỹ thuật thử nghiệm, chưa phải AOI toàn nội đô Vành đai 3 đã được rà soát.
 
 ### Chạy các bước
+
+> Các lệnh dưới đây tái lập pipeline cho snapshot pilot đã ghi nhận; để dựng bundle Vành đai 3, xem [hướng dẫn dữ liệu](backend/data/README.md#aoi-vành-đai-3-và-nghiệm-thu-m1).
+
+<details>
+<summary><strong>Mở toàn bộ lệnh dựng graph offline</strong></summary>
 
 Tạo AOI/routing area từ polygon nguồn trong config:
 
@@ -295,6 +449,10 @@ PYTHONPATH=backend uv run --project backend --locked --extra data python -m scri
   --output-dir backend/data/validated/hanoi-pilot-car-v1-csr-v1
 ```
 
+</details>
+
+---
+
 ## Kiểm tra prototype tham chiếu M2
 
 Chạy bộ kiểm thử offline và xuất báo cáo trên bundle đã validation của M1:
@@ -316,6 +474,8 @@ tên output mới cho mỗi lần chạy; CLI không ghi đè báo cáo cũ và 
 Đây là kiểm tra prototype; TC-01–TC-12 chạy trong pytest, còn HTTP, cache,
 CSR production và TC-13–TC-16 được nghiệm thu ở các mốc tương ứng.
 
+---
+
 ## Đối chiếu TC-16
 
 ```bash
@@ -328,6 +488,8 @@ CLI mặc định chạy 1.000 request tổng hợp theo seed cố định. Các
 gần nhau, phân tán và sát biên AOI. CLI đối chiếu thứ tự điểm và ghi chênh lệch
 điểm số, số tuyến kiểm tra và ca sai khác đầu tiên nếu có. Dùng `--requests 6` để chạy
 smoke test cả ba nhóm. Mỗi lượt chạy cần một đường dẫn báo cáo mới.
+
+---
 
 ## Benchmark API trên Docker (M6)
 
@@ -356,6 +518,8 @@ của ứng dụng. Bộ nhớ container dùng đỉnh tích lũy từ cgroup v2
 Nếu một điều kiện kiểm tra không đạt, CLI vẫn ghi báo cáo và trả mã thoát 1.
 Dùng `--requests 6` để chạy smoke test trước khi đo nghiệm thu.
 
+---
+
 ## Hồ sơ kiểm tra M6
 
 Báo cáo local lưu dưới `backend/data/reports/`. Giữ báo cáo benchmark cũ và mới
@@ -371,6 +535,9 @@ Báo cáo local lưu dưới `backend/data/reports/`. Giữ báo cáo benchmark 
 | SCC | `backend/data/reviews/hanoi-ring3-v1-3000-v2.json` và SVG cùng tên ghi vùng bị loại và mẫu khoảng cách đến đường giữ lại. |
 | Log và kiểm tra tuyến mẫu | `m6-ops-evidence-20261125.json` ghi phiên bản mã, môi trường và kết quả kiểm tra log. `m6-route-review-20261125.json` ghi các ca cầu vượt, nút giao và đường một chiều. |
 | Đối chiếu ngoài giờ cao điểm | `hanoi-travel-time-tomtom-20261125.json` ghi kết quả TomTom và các ca loại vì lệch đầu mút. Quyết định giữ `car-v1` được ghi trong journal nghiệm thu. |
+
+<details>
+<summary><strong>Tái lập hồ sơ kiểm tra trên checkout khác</strong></summary>
 
 Để ghi báo cáo cho checkout khác, chạy các lệnh sau từ thư mục gốc sau khi cài
 Chromium và khởi động Compose. Đặt `W2M_E2E_FRONTEND_URL` nếu frontend dùng cổng
@@ -394,17 +561,23 @@ mkdir -p "$w2m_evidence"
 
 uv run --project backend --locked --extra data pytest backend/tests \
   --junitxml "$w2m_evidence/backend.xml"
-node --test --test-reporter=junit frontend/tests/*.test.mjs > "$w2m_evidence/frontend.xml"
-node --test --test-reporter=junit frontend/tests/e2e/*.test.mjs > "$w2m_evidence/e2e.xml"
+node --test --test-reporter=junit frontend/tests/***.test.mjs > "$w2m_evidence/frontend.xml"
+node --test --test-reporter=junit frontend/tests/e2e/***.test.mjs > "$w2m_evidence/e2e.xml"
 ```
 
 Chạy lint, typecheck và build theo mục [Kiểm thử](#kiểm-thử). Để tái lập
 phép đối chiếu ngoài giờ cao điểm, xem
 [quy trình đối chiếu thời gian](backend/data/README.md#đối-chiếu-thời-gian-trên-dữ-liệu-thật).
 
+</details>
+
+---
+
 ## Giới hạn mô hình
 
-MVP dùng profile tốc độ ô tô tĩnh `car-v1`. Thời gian trên UI là ước lượng.
+> [!WARNING]
+> MVP dùng profile tốc độ ô tô tĩnh `car-v1`. Thời gian trên UI là ước lượng.
+
 Mô hình tuân theo hướng cạnh trong graph. Các quy tắc cấm rẽ, chi phí rẽ, đèn tín hiệu
 và giao thông theo giờ chưa được mô hình hóa. Điểm gặp là node trong AOI và có thể
 nằm ở vị trí không phù hợp để dừng xe. Hệ thống chỉ tối ưu chiều đi.
@@ -413,6 +586,8 @@ nằm ở vị trí không phù hợp để dừng xe. Hệ thống chỉ tối 
   và thời gian tiếp cận, và lọc vị trí gặp không phù hợp.
 - **Phase 4** mở rộng sang điểm gặp giữa cạnh, gợi ý địa điểm thực tế, trọng số theo giờ
   và nhóm dùng nhiều phương tiện.
+
+---
 
 ## Cấu trúc mã nguồn
 
@@ -432,3 +607,14 @@ nằm ở vị trí không phù hợp để dừng xe. Hệ thống chỉ tối 
 | `backend/tests/` | Test nền tảng, dữ liệu và CLI offline |
 | `frontend/app/` | Layout, trang chủ và CSS |
 | `frontend/types/meeting.ts` | TypeScript contracts tương ứng models backend |
+
+---
+
+<div align="center">
+
+**W2M · Where to meet**
+
+[Quay lại đầu trang](#w2m) · [Kế hoạch MVP](docs/plans/W2M-MVP-Plan.md) · [Dữ liệu đồ thị](backend/data/README.md)
+
+</div>
+
