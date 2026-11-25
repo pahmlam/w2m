@@ -40,6 +40,8 @@ def test_byte_budget_evicts_least_recently_used_result(csr_bundle: Path) -> None
         assert cache.get("first") is routing
         assert cache.get("second") is None
         assert cache.get("third") is routing
+        assert cache.statistics()["evictions"] == 1
+        assert cache.statistics()["peak_bytes"] == 2 * size_bytes
         cache.clear()
         assert cache.get("first") is None
         assert cache.get("third") is None

@@ -1,0 +1,6 @@
+services:
+  backend:
+    cpus: 4.0
+    mem_limit: 8g
+    environment:
+      W2M_BENCHMARK_DIAGNOSTICS: "true"

@@ -292,6 +292,33 @@ gần nhau, phân tán và sát biên AOI. CLI đối chiếu thứ tự điểm
 điểm số, số tuyến kiểm tra và ca sai khác đầu tiên nếu có. Dùng `--requests 6` để chạy
 smoke test cả ba nhóm. Mỗi lượt chạy cần một đường dẫn báo cáo mới.
 
+## Benchmark API trên Docker (M6)
+
+Chạy từ thư mục gốc với bundle Vành đai 3. Cấp ít nhất 4 vCPU và 8 GiB RAM cho
+Docker Desktop. Compose dành riêng cho benchmark giới hạn backend ở 4 vCPU và
+8 GiB RAM. Dùng container mới cho mỗi lượt để bộ nhớ đỉnh và thống kê cache
+bắt đầu từ lúc khởi động.
+
+```sh
+W2M_BACKEND_PORT=8002 docker compose -p w2m-bench -f compose.yaml -f compose.benchmark.yaml \
+  up --build --detach --wait backend
+
+PYTHONPATH=backend uv run --project backend --locked python -m scripts.benchmark_meeting_api \
+  --bundle-dir backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
+  --output "backend/data/reports/m6-api-$(date +%Y%m%d-%H%M%S).json"
+
+W2M_BACKEND_PORT=8002 docker compose -p w2m-bench -f compose.yaml -f compose.benchmark.yaml down
+```
+
+CLI warm-up 20 request và đo 1.000 cặp tính mới/rerank tuần tự. Mỗi rerank
+đi ngay sau request tạo mới tương ứng để đo với dữ liệu còn trong cache. Bài
+tải 50 request đồng thời có số liệu riêng. Báo cáo ghi thời gian từng bước
+trong backend và thời gian HTTP gồm cả dựng tuyến, serialize và đọc phản hồi.
+P95 HTTP được đối chiếu với mốc 5 giây và 300 ms. Cache dùng số byte hạch toán
+của ứng dụng. Bộ nhớ container dùng đỉnh tích lũy từ cgroup v2 (`memory.peak`).
+Nếu một điều kiện kiểm tra không đạt, CLI vẫn ghi báo cáo và trả mã thoát 1.
+Dùng `--requests 6` để chạy smoke test trước khi đo nghiệm thu.
+
 ## Cấu trúc mã nguồn
 
 | Đường dẫn | Trách nhiệm |

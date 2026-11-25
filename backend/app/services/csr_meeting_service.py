@@ -1,8 +1,11 @@
 """Run the CSR meeting pipeline in a bounded pool outside the event loop."""
 
 import asyncio
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
+from threading import Lock
 from time import perf_counter_ns
 
 from app.models.requests import MeetingRequest, Optimization
@@ -41,10 +44,14 @@ class CSRMeetingService:
         self, graph: CSRGraph, max_concurrent_tasks: int,
         *, snapper: CoordinateSnapper[CSRGraph] | None = None,
         routing_cache: MeetingRoutingCache | None = None,
+        track_workers: bool = False,
     ) -> None:
         self._graph = graph
         self._snapper = snapper
         self._routing_cache = routing_cache
+        self._worker_lock = Lock() if track_workers else None
+        self._active_workers = 0
+        self._peak_active_workers = 0
         self._executor = ThreadPoolExecutor(
             max_workers=max_concurrent_tasks, thread_name_prefix="w2m-csr",
         )
@@ -60,17 +67,38 @@ class CSRMeetingService:
 
     async def compute_request(self, request: MeetingRequest) -> CSRMeetingComputation:
         """Snap and compute a request in one worker slot, with stage timings."""
-        return await asyncio.get_running_loop().run_in_executor(
-            self._executor, self._compute_request, request,
-        )
+        return await self._submit(partial(self._compute_request, request))
 
     async def rerank(
         self, routing: CSRRoutingResult, optimization: Optimization,
     ) -> CSRMeetingComputation:
         """Rank cached paths and rebuild selected routes in a worker slot."""
-        return await asyncio.get_running_loop().run_in_executor(
-            self._executor, self._rerank, routing, optimization,
-        )
+        return await self._submit(partial(self._rerank, routing, optimization))
+
+    async def _submit(self, work: Callable[[], CSRMeetingComputation]) -> CSRMeetingComputation:
+        loop = asyncio.get_running_loop()
+        lock = self._worker_lock
+        if lock is None:
+            return await loop.run_in_executor(self._executor, work)
+
+        def run() -> CSRMeetingComputation:
+            with lock:
+                self._active_workers += 1
+                self._peak_active_workers = max(self._peak_active_workers, self._active_workers)
+            try:
+                return work()
+            finally:
+                with lock:
+                    self._active_workers -= 1
+
+        return await loop.run_in_executor(self._executor, run)
+
+    def peak_active_workers(self) -> int:
+        """Return the high-water mark for running HTTP routing jobs."""
+        if self._worker_lock is None:
+            return 0
+        with self._worker_lock:
+            return self._peak_active_workers
 
     async def close(self) -> None:
         """Cancel jobs that have not started and let running jobs finish off-loop."""

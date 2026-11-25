@@ -1,6 +1,7 @@
 """Verify request-local overlays and shortest paths over an immutable CSR bundle."""
 
 from dataclasses import replace
+from math import isfinite
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,7 @@ from app.services.csr_route_edges import CSRRouteEdge, trace_csr_route_edges
 from app.services.csr_shortest_path import NO_PREDECESSOR, CSRRoutingResult, route_csr_origins
 from app.services.graph_loader import load_csr_graph
 from app.services.meeting_optimizer import build_meeting_results, rank_candidates, select_candidates
+from app.services.objective import owa_weights, score_candidate
 from app.services.route_builder import build_csr_route
 
 
@@ -249,6 +251,52 @@ def test_csr_reranking_filters_raw_cutoff_and_preserves_pareto_ties(
     assert [c.node_id for c in reduced.candidates] == [7]
     with pytest.raises(ValueError, match="coverage"):
         rank_candidates(routing, phi=0.5, max_travel_seconds=302)
+
+
+def test_csr_batch_ranking_matches_scalar_candidates_exactly(csr_bundle: Path) -> None:
+    graph = load_csr_graph(csr_bundle)
+    access_times = (0.0, 0.05, 0.15, 0.55)
+    snaps = [replace(_two_way_snap(label), access_seconds=access)
+             for label, access in zip("ABCD", access_times, strict=True)]
+    routing = route_csr_origins(graph, snaps, 7200)
+    # Include half-decisecond ties alongside general times and unreachable nodes.
+    rng = np.random.default_rng(20261125)
+    network = np.concatenate((
+        rng.integers(0, 300, size=(600, 4)) / 20,
+        rng.uniform(0, 7200, size=(600, 4)),
+        [[np.inf, 10, 10, 10], [10, np.nan, 10, 10], [10, 10, 10, 10]],
+    ))
+    ids = rng.permutation(np.arange(len(network)) - 600)
+    flags = np.ones(len(network), dtype=bool)
+    flags[-1] = False
+    graph = replace(graph, _mappings={
+        **graph.mappings, "node_ids": ids,
+        "in_aoi": np.ones(len(network), dtype=bool), "is_candidate": flags,
+    })
+    routing = replace(routing, graph=graph, sources=tuple(
+        replace(source, distances_seconds=distances)
+        for source, distances in zip(routing.sources, network.T, strict=True)
+    ))
+
+    for limit in (300, 3600, 7200):
+        for phi in (0, 0.1, 0.5, 0.9, 1):
+            weights = owa_weights(phi, len(access_times))
+            expected = []
+            for node_id, costs, candidate in zip(
+                ids.tolist(), network.tolist(), flags, strict=True,
+            ):
+                raw = tuple(access + cost for access, cost in zip(access_times, costs, strict=True))
+                if not candidate or any(not isfinite(time) or time > limit for time in raw):
+                    continue
+                if limit < 7200 and any(
+                    cost > limit - access for cost, access in zip(costs, access_times, strict=True)
+                ):
+                    continue
+                expected.append(score_candidate(node_id, raw, weights))
+            expected.sort(key=lambda candidate: candidate.sort_key)
+
+            ranked = rank_candidates(routing, phi=phi, max_travel_seconds=limit)
+            assert ranked.candidates == tuple(expected)
 
 
 def test_csr_route_joins_curved_partial_edge_and_persistent_edge(csr_bundle: Path) -> None:

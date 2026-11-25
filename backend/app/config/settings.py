@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     ] = 500
     cache_ttl_seconds: Annotated[int, Field(gt=0)] = 900
     cache_max_bytes: Annotated[int, Field(gt=0)] = 536870912
+    benchmark_diagnostics: bool = False
     cors_origins: list[str] = ["http://localhost:3000"]
 
 

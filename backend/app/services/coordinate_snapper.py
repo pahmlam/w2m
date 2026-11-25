@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -89,7 +90,9 @@ class CoordinateSnapper[GraphT: (ReferenceGraph, CSRGraph)]:
                      if edge not in self.reverse or edge < self.reverse[edge]]
         self.edge_ids = tuple(edge for edge, _ in roads)
         self._tree_indices = {edge: i for i, edge in enumerate(self.edge_ids)}
+        tree_started = perf_counter()
         self.tree = STRtree([line for _, line in roads])
+        self.tree_build_ms = (perf_counter() - tree_started) * 1000
 
     def snap_origins(self, request: MeetingRequest) -> tuple[SnapResult, ...]:
         """Check every origin's coverage before snapping; preserve input order and duplicates."""

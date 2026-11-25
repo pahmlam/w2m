@@ -49,7 +49,29 @@ class MeetingRoutingCache:
         self._max_bytes = max_bytes
         self._entries: OrderedDict[str, _Entry] = OrderedDict()
         self._size_bytes = 0
+        self._peak_bytes = 0
+        self._evictions = 0
+        self._source_hits = 0
+        self._source_misses = 0
+        self._request_hits = 0
+        self._request_misses = 0
         self._lock = Lock()
+
+    def statistics(self) -> dict[str, int]:
+        """Snapshot cache accounting and lookup outcomes without request data."""
+        with self._lock:
+            return {
+                "max_bytes": self._max_bytes,
+                "ttl_seconds": self._ttl_seconds,
+                "size_bytes": self._size_bytes,
+                "peak_bytes": self._peak_bytes,
+                "entries": len(self._entries),
+                "evictions": self._evictions,
+                "source_hits": self._source_hits,
+                "source_misses": self._source_misses,
+                "request_hits": self._request_hits,
+                "request_misses": self._request_misses,
+            }
 
     def put(self, request_id: str, routing: CSRRoutingResult) -> None:
         """Store the full routing result under its response ID if it fits."""
@@ -60,6 +82,7 @@ class MeetingRoutingCache:
                 return
             while self._size_bytes + size_bytes > self._max_bytes:
                 self._remove(next(iter(self._entries)))
+                self._evictions += 1
             sources = {
                 (_source_location(routing.graph, paths.snap), paths.network_cutoff_seconds): paths
                 for paths in routing.sources
@@ -68,17 +91,21 @@ class MeetingRoutingCache:
             expiry = self._loop.call_later(self._ttl_seconds, self._expire, request_id)
             self._entries[request_id] = _Entry(routing, sources, size_bytes, expires_at, expiry)
             self._size_bytes += size_bytes
+            self._peak_bytes = max(self._peak_bytes, self._size_bytes)
 
     def get(self, request_id: str) -> CSRRoutingResult | None:
         """Retrieve current tables and refresh recency without extending expiry."""
         with self._lock:
             entry = self._entries.get(request_id)
             if entry is None:
+                self._request_misses += 1
                 return None
             if entry.expires_at <= monotonic():
                 self._remove(request_id)
+                self._request_misses += 1
                 return None
             self._entries.move_to_end(request_id)
+            self._request_hits += 1
             return entry.routing
 
     def get_source(
@@ -93,7 +120,9 @@ class MeetingRoutingCache:
                     continue
                 for (cached_location, cached_cutoff), source in entry.sources.items():
                     if cached_location == location and cached_cutoff >= cutoff_seconds:
+                        self._source_hits += 1
                         return source
+            self._source_misses += 1
         return None
 
     def clear(self) -> None:

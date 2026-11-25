@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from math import hypot, isfinite
+from math import fsum, hypot, isfinite
 from time import perf_counter_ns
 from typing import TYPE_CHECKING
 
@@ -13,11 +13,39 @@ import numpy as np
 from app.models.requests import Location
 from app.models.responses import MeetingResult
 from app.services.csr_shortest_path import CSRRoutingResult
-from app.services.objective import ScoredCandidate, owa_weights, score_candidate
+from app.services.objective import ScoredCandidate, owa_weights, quantize_seconds, score_candidate
 from app.services.route_builder import build_csr_route, build_route
 
 if TYPE_CHECKING:
     from app.services.shortest_path import RoutingResult
+
+
+@dataclass(frozen=True, eq=False)
+class _CSRScoredCandidates:
+    node_ids: np.ndarray
+    raw_times: np.ndarray
+    travel_times: np.ndarray
+    scores: np.ndarray
+    averages: np.ndarray
+    order: np.ndarray
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _CSRScoredCandidates):
+            return NotImplemented
+        return all(np.array_equal(left[self.order], right[other.order]) for left, right in (
+            (self.node_ids, other.node_ids), (self.raw_times, other.raw_times),
+            (self.travel_times, other.travel_times), (self.scores, other.scores),
+            (self.averages, other.averages),
+        ))
+
+    def candidate(self, row: int | np.integer) -> ScoredCandidate:
+        times = tuple(self.travel_times[row].tolist())
+        maximum, minimum = max(times), min(times)
+        return ScoredCandidate(
+            int(self.node_ids[row]), tuple(self.raw_times[row].tolist()), times,
+            float(self.scores[row]), maximum, minimum, quantize_seconds(maximum - minimum),
+            float(self.averages[row]),
+        )
 
 
 @dataclass(frozen=True)
@@ -29,28 +57,66 @@ class CandidateRanking[RoutingT: (RoutingResult, CSRRoutingResult)]:
     phi: float
     max_travel_seconds: float
     weights: tuple[float, ...]
-    candidates: tuple[ScoredCandidate, ...]
+    _scored: tuple[ScoredCandidate, ...] | _CSRScoredCandidates = field(repr=False)
     scan_ms: float = field(default=0.0, compare=False)
     rank_ms: float = field(default=0.0, compare=False)
 
+    @property
+    def candidates(self) -> tuple[ScoredCandidate, ...]:
+        """Materialize the complete ranking for callers that need to inspect it."""
+        if isinstance(self._scored, _CSRScoredCandidates):
+            return tuple(self._scored.candidate(row) for row in self._scored.order)
+        return self._scored
+
 
 def _candidate_network_times(
-    routing: RoutingResult | CSRRoutingResult,
+    routing: RoutingResult,
 ) -> Iterator[tuple[int, tuple[float, ...]]]:
-    if isinstance(routing, CSRRoutingResult):
-        mappings = routing.graph.mappings
-        node_ids = mappings["node_ids"]
-        distances = tuple(source.distances_seconds for source in routing.sources)
-        for index in np.flatnonzero(mappings["in_aoi"] & mappings["is_candidate"]):
-            yield int(node_ids[index]), tuple(float(table[index]) for table in distances)
-        return
-
     distances = tuple(source.paths.distances_seconds for source in routing.sources)
     for node, data in routing.overlay.reference.graph.nodes(data=True):
         if type(data.get("in_aoi")) is not bool or type(data.get("is_candidate")) is not bool:
             raise ValueError("Expected validated boolean candidate flags")
         if data["in_aoi"] and data["is_candidate"] and all(node in table for table in distances):
             yield node, tuple(table[node] for table in distances)
+
+
+def _scan_csr_candidates(
+    routing: CSRRoutingResult, access_times: tuple[float, ...],
+    network_limits: tuple[float, ...], travel_limit: float, weights: tuple[float, ...],
+) -> tuple[_CSRScoredCandidates, int]:
+    mappings = routing.graph.mappings
+    indices = np.flatnonzero(mappings["in_aoi"] & mappings["is_candidate"])
+    network_times = np.column_stack([
+        source.distances_seconds[indices] for source in routing.sources
+    ])
+    if np.any(network_times < 0):
+        raise ValueError("Network travel times cannot be negative")
+
+    raw_times = network_times + access_times
+    valid = np.all(np.isfinite(raw_times) & (raw_times <= travel_limit), axis=1)
+    if travel_limit < routing.max_travel_seconds:
+        # Match a fresh Dijkstra cutoff even when adding access rounds down to the limit.
+        valid &= np.all(network_times <= network_limits, axis=1)
+    node_ids = mappings["node_ids"][indices[valid]]
+    raw_times = raw_times[valid]
+    travel_times = (np.rint(10 * raw_times) + 0.0) / 10
+    sorted_raw = np.sort(raw_times, axis=1)[:, ::-1]
+    sorted_times = np.rint(10 * sorted_raw) / 10
+    # Keep the scalar scorer's fsum before rounding, including half-decisecond ties.
+    scores = np.fromiter(
+        map(fsum, (sorted_times * weights).tolist()), dtype=np.float64, count=len(node_ids),
+    )
+    averages = np.fromiter(
+        map(fsum, travel_times.tolist()), dtype=np.float64, count=len(node_ids),
+    ) / len(weights)
+    scores = np.rint(10 * scores) / 10
+    averages = np.rint(10 * averages) / 10
+
+    rank_started = perf_counter_ns()
+    # lexsort takes the primary key last, including the slowest raw time within ties.
+    order = np.lexsort((node_ids, *sorted_raw.T[::-1], averages, sorted_times[:, 0], scores))
+    scored = _CSRScoredCandidates(node_ids, raw_times, travel_times, scores, averages, order)
+    return scored, rank_started
 
 
 def rank_candidates[RoutingT: (RoutingResult, CSRRoutingResult)](
@@ -78,19 +144,20 @@ def rank_candidates[RoutingT: (RoutingResult, CSRRoutingResult)](
             raise ValueError("Invalid source access time or computed cutoff")
         if limit > cutoff:
             raise ValueError("Requested limit exceeds computed routing coverage")
-    reduced_csr_cutoff = (
-        isinstance(routing, CSRRoutingResult) and max_travel_seconds < routing.max_travel_seconds
-    )
     scan_start = perf_counter_ns()
+    if isinstance(routing, CSRRoutingResult):
+        scored, rank_start = _scan_csr_candidates(
+            routing, access_times, network_limits, max_travel_seconds, weights,
+        )
+        return CandidateRanking(
+            routing, ids, phi, max_travel_seconds, weights, scored,
+            (rank_start - scan_start) / 1e6, (perf_counter_ns() - rank_start) / 1e6,
+        )
+
     candidates = []
     for node, network_times in _candidate_network_times(routing):
         if any(value < 0 for value in network_times):
             raise ValueError("Network travel times cannot be negative")
-        # Match the fresh search's network cutoff at floating-point boundaries.
-        if reduced_csr_cutoff and any(
-            value > limit for value, limit in zip(network_times, network_limits, strict=True)
-        ):
-            continue
         raw_times = tuple(access + value
                           for access, value in zip(access_times, network_times, strict=True))
         if any(not isfinite(value) or value > max_travel_seconds for value in raw_times):
@@ -116,22 +183,30 @@ def select_candidates(
             or not 0 <= min_spacing_meters <= 5000):
         raise ValueError("Spacing must be finite and within [0, 5000] meters")
     routing = ranking.routing
-    if isinstance(routing, CSRRoutingResult):
+    scored = ranking._scored
+    if isinstance(scored, _CSRScoredCandidates):
+        assert isinstance(routing, CSRRoutingResult)
         node_xy = routing.graph.mappings["node_xy"]
         node_indices = routing.graph.node_indices
+        rows = scored.order
+        node_ids = scored.node_ids[rows]
     else:
+        assert not isinstance(routing, CSRRoutingResult)
         nodes = routing.overlay.reference.graph.nodes
+        rows = range(len(scored))
+        node_ids = (candidate.node_id for candidate in scored)
     selected: list[ScoredCandidate] = []
     selected_xy: list[tuple[float, float]] = []
-    for candidate in ranking.candidates:
-        if isinstance(routing, CSRRoutingResult):
-            x, y = node_xy[node_indices[candidate.node_id]]
+    for row, node_id in zip(rows, node_ids, strict=True):
+        if isinstance(scored, _CSRScoredCandidates):
+            x, y = node_xy[node_indices[node_id]]
         else:
-            point = nodes[candidate.node_id]
+            point = nodes[node_id]
             x, y = point["x"], point["y"]
         if all(hypot(x - other_x, y - other_y) >= min_spacing_meters
                for other_x, other_y in selected_xy):
-            selected.append(candidate)
+            selected.append(scored.candidate(row) if isinstance(scored, _CSRScoredCandidates)
+                            else scored[row])
             selected_xy.append((x, y))
             if len(selected) == top_k:
                 break

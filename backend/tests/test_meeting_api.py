@@ -1,5 +1,6 @@
 """Exercise fresh and cached meeting-points requests on an offline CSR fixture."""
 
+import json
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -28,6 +29,44 @@ def meeting_client(csr_bundle: Path, monkeypatch: pytest.MonkeyPatch) -> Iterato
     monkeypatch.setattr("app.models.requests.get_settings", lambda: settings)
     with TestClient(create_app()) as client:
         yield client
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_ready_benchmark_diagnostics_are_opt_in_and_track_cache(
+    csr_bundle: Path, monkeypatch: pytest.MonkeyPatch, enabled: bool,
+) -> None:
+    settings = Settings(_env_file=None, graph_dir=csr_bundle, benchmark_diagnostics=enabled)
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    header = "X-W2M-Benchmark"
+    lon, lat = TO_WGS84.transform(500004, 2300000)
+    body = {"origins": [
+        {"id": origin_id, "lon": lon, "lat": lat} for origin_id in ORIGIN_IDS
+    ]}
+    with TestClient(create_app()) as client:
+        assert header not in client.get("/ready").headers
+        fresh = client.post(MEETING_URL, json=body)
+        assert fresh.status_code == 200
+        rerank = client.post(
+            f"{MEETING_URL}/{fresh.json()['request_id']}/rerank", json={"optimization": {}},
+        )
+        assert rerank.status_code == 200
+        assert client.post("/api/v1/meeting-points/unknown/rerank",
+                           json={"optimization": {}}).status_code == 409
+        assert client.post(MEETING_URL, json=body).status_code == 200
+        ready = client.get("/ready", headers={header: "1"})
+        assert ready.json() == {"status": "ready"}
+        if not enabled:
+            assert header not in ready.headers
+            return
+        stats = json.loads(ready.headers[header])
+        assert stats["graph_version"] == "fixture-v1"
+        assert stats["graph_load_ms"] >= 0
+        assert 0 <= stats["strtree_build_ms"] <= stats["coordinate_snapper_init_ms"]
+        assert stats["peak_active_workers"] == 1
+        assert stats["cache"]["request_hits"] == 1
+        assert stats["cache"]["request_misses"] == 1
+        assert stats["cache"]["source_hits"] == stats["cache"]["source_misses"] == 4
+        assert 0 < stats["cache"]["peak_bytes"] <= stats["cache"]["max_bytes"]
 
 
 def test_map_config_returns_bundle_aoi_and_runtime_parameters(
