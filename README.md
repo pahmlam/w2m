@@ -29,8 +29,33 @@ tương ứng trong trình duyệt. Compose ghép URL API và CORS từ hai cổ
 
 Backend kiểm tra metadata và checksum khi nạp bundle được mount chỉ đọc.
 Frontend khởi động sau khi `/ready` trả 200. Nếu quá trình chờ lỗi, chạy
-`docker compose logs backend` để kiểm tra bundle và quyền đọc. Dùng
+`docker compose logs backend` để xem trạng thái nạp graph. Dùng
 `docker compose down` để dừng hai dịch vụ.
+
+### Thay đồ thị và xử lý lỗi
+
+Tạo bundle theo [hướng dẫn dựng lại snapshot và graph Vành đai 3](backend/data/README.md#aoi-vành-đai-3-và-nghiệm-thu-m1).
+Giữ cả thư mục `validated` của từng phiên bản để có thể quay lại bundle trước.
+Chọn bundle bằng đường dẫn tuyệt đối của thư mục đó rồi tạo lại backend.
+
+```sh
+W2M_GRAPH_BUNDLE=/absolute/path/to/new/validated docker compose up --detach --wait --force-recreate backend
+curl --fail http://localhost:8000/ready
+curl --fail http://localhost:8000/api/v1/map/config
+```
+
+`/api/v1/map/config` cho biết `graph_version` và `weight_profile_version` đang chạy.
+Để quay lại, chạy cùng lệnh với đường dẫn bundle trước. Restart làm mất cache trong RAM,
+nên ứng dụng có thể nhận 409 và tính lại từ bốn vị trí hiện tại.
+
+| Triệu chứng | Cách kiểm tra hoặc xử lý |
+|---|---|
+| Compose báo thiếu bind mount | Kiểm tra `W2M_GRAPH_BUNDLE` trỏ tới thư mục `validated` có thật trên host. |
+| `/health` trả 200 nhưng `/ready` trả 503 | Kiểm tra log startup, quyền đọc và bộ file đi cùng `metadata.json`. Nếu checksum sai, dùng lại toàn bộ bundle đã validation hoặc dựng bundle mới. |
+| Trình duyệt báo lỗi mạng hoặc CORS | Kiểm tra cổng backend/frontend, `/ready` và `NEXT_PUBLIC_API_BASE_URL`. Build lại frontend nếu đổi URL backend. |
+| `SNAP_FAILED` | Kiểm tra điểm nằm trong AOI và dời gần một đường thuộc mạng ô tô. Một số đường bị loại khi giữ SCC lớn nhất. |
+| `NO_COMMON_REACHABLE_NODE` | Tăng cutoff trong giới hạn API hoặc đổi vị trí. |
+| `RECOMPUTE_REQUIRED` | Tính mới khi dữ liệu cache hết hạn, bị loại hoặc không phủ cutoff mới. |
 
 Bản đồ nền mặc định dùng OpenFreeMap Positron. Để đổi nguồn tile cho Docker,
 đặt các biến `NEXT_PUBLIC_MAP_*` trong môi trường shell hoặc `.env` ở thư mục gốc,
@@ -68,7 +93,8 @@ Terminal 1:
 
 ```sh
 W2M_GRAPH_DIR=backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
-  uv run --project backend --locked uvicorn app.main:app --app-dir backend --reload --port 8000
+  uv run --project backend --locked uvicorn app.main:app --app-dir backend --reload --port 8000 \
+  --no-access-log
 ```
 
 Terminal 2:
@@ -114,6 +140,23 @@ bắt đầu chạy đến khi dựng xong kết quả, bao gồm cả bước t
 Các endpoint nghiệp vụ trả 503 `GRAPH_UNAVAILABLE` khi chưa nạp được đồ thị. Lỗi validation trả 400
 `INVALID_COORDINATES` hoặc `INVALID_PARAMETERS`.
 
+Khi truy lỗi, lấy `X-Request-ID` từ HTTP rồi tìm ID đó trong `docker compose logs backend`.
+Bản ghi gồm mẫu route, status, phiên bản graph/profile, `server_ms` tính đến khi backend
+tạo phản hồi, và `timings_ms` nếu có kết quả tính toán. Log chuẩn dùng mẫu route cố định,
+bỏ URL thô, query, header, body, ID cache rerank và nội dung ngoại lệ. Luồng chạy Docker
+và development tắt access log mặc định của Uvicorn.
+
+Kiểm tra log khi chạy Docker bằng một request mẫu với cache ID không tồn tại.
+Phản hồi trả 409. Trong log, `request_id` khớp `X-Request-ID` và route hiện
+`/api/v1/meeting-points/{request_id}/rerank`. Chuỗi `m6-test-marker` chỉ có
+trong lệnh mẫu.
+
+```sh
+curl -si -X POST 'http://localhost:8000/api/v1/meeting-points/m6-test-marker/rerank?token=m6-test-marker' \
+  -H 'Content-Type: application/json' -d '{"optimization":{}}'
+docker compose logs --since=2m backend
+```
+
 Có thể kiểm tra HTTP bằng:
 
 ```sh
@@ -151,13 +194,7 @@ npm --prefix frontend exec -- playwright install chromium --only-shell
 npm --prefix frontend run test:e2e
 ```
 
-Bằng chứng local trước M5:
-
-- Backend: Ruff và **276 test đạt**, không bỏ qua, sau bước xuất CSR
-  ngày 2026-11-11. Còn 58 cảnh báo deprecation Shapely/TestClient.
-- Frontend: người phát triển đã xác nhận install/audit (0 vulnerabilities),
-  lint/typecheck/build và trang chủ hoạt động ở M0; chưa chạy lại trong các task M1.
-- Remote CI và benchmark MVP chưa được xác minh.
+Xem [hồ sơ kiểm tra M6](#hồ-sơ-kiểm-tra-m6) để lưu báo cáo của lần chạy hiện tại.
 
 ## Pipeline dữ liệu offline — M1
 
@@ -318,6 +355,64 @@ P95 HTTP được đối chiếu với mốc 5 giây và 300 ms. Cache dùng s�
 của ứng dụng. Bộ nhớ container dùng đỉnh tích lũy từ cgroup v2 (`memory.peak`).
 Nếu một điều kiện kiểm tra không đạt, CLI vẫn ghi báo cáo và trả mã thoát 1.
 Dùng `--requests 6` để chạy smoke test trước khi đo nghiệm thu.
+
+## Hồ sơ kiểm tra M6
+
+Báo cáo local lưu dưới `backend/data/reports/`. Giữ báo cáo benchmark cũ và mới
+để đối chiếu. Bundle nghiệm thu là `hanoi-ring3-car-v1-3000-v1` với profile `car-v1`.
+
+| Kiểm tra | Bằng chứng hiện có |
+|---|---|
+| Test backend và frontend | `m6-ops-backend.xml` ghi 471 test đạt. `m6-ops-frontend.xml` ghi 29 test đạt. |
+| E2E Chromium | `m6-ops-e2e.xml` ghi 3 kịch bản đạt trên Compose ở cổng frontend 3001, API thật và tile cố định. |
+| TC-15 | `hanoi-ring3-tc15-v1.json` ghi 200/200 cặp đạt, seed `20261114`. |
+| TC-16 | `tc16-after-scan-20261125-100443.json` ghi 1.000/1.000 request đạt, 14.600 tuyến và sai lệch score tối đa 0 giây, seed `20261120`. |
+| Benchmark | `m6-api-20261125-091837.json` ghi rerank vượt ngưỡng. `m6-api-after-scan-20261125-133247.json` và `m6-api-operations-20261125.json` ghi đạt 10/10 điều kiện với seed `20261120`. Báo cáo thứ hai đo sau thay đổi log. |
+| SCC | `backend/data/reviews/hanoi-ring3-v1-3000-v2.json` và SVG cùng tên ghi vùng bị loại và mẫu khoảng cách đến đường giữ lại. |
+| Log và kiểm tra tuyến mẫu | `m6-ops-evidence-20261125.json` ghi phiên bản mã, môi trường và kết quả kiểm tra log. `m6-route-review-20261125.json` ghi các ca cầu vượt, nút giao và đường một chiều. |
+| Đối chiếu ngoài giờ cao điểm | `hanoi-travel-time-tomtom-20261125.json` ghi kết quả TomTom và các ca loại vì lệch đầu mút. Quyết định giữ `car-v1` được ghi trong journal nghiệm thu. |
+
+Để ghi báo cáo cho checkout khác, chạy các lệnh sau từ thư mục gốc sau khi cài
+Chromium và khởi động Compose. Đặt `W2M_E2E_FRONTEND_URL` nếu frontend dùng cổng
+khác 3000. Fixture test và E2E cố định nên metadata không cần seed ngẫu nhiên.
+
+```sh
+w2m_evidence="backend/data/reports/m6-verify-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$w2m_evidence"
+{
+  date -u
+  git rev-parse HEAD
+  git status --short
+  uname -sm
+  uv run --project backend --locked python --version
+  node --version
+  curl --fail --silent --show-error http://localhost:8000/api/v1/map/config |
+    uv run --project backend --locked python -c \
+    'import json,sys; d=json.load(sys.stdin); print(d["graph_version"], d["weight_profile_version"])'
+  printf '%s\n' 'seed: fixed fixtures'
+} > "$w2m_evidence/environment.txt"
+
+uv run --project backend --locked --extra data pytest backend/tests \
+  --junitxml "$w2m_evidence/backend.xml"
+node --test --test-reporter=junit frontend/tests/*.test.mjs > "$w2m_evidence/frontend.xml"
+node --test --test-reporter=junit frontend/tests/e2e/*.test.mjs > "$w2m_evidence/e2e.xml"
+```
+
+Chạy lint, typecheck và build theo mục [Kiểm thử](#kiểm-thử). Để tái lập
+phép đối chiếu ngoài giờ cao điểm, xem
+[quy trình đối chiếu thời gian](backend/data/README.md#đối-chiếu-thời-gian-trên-dữ-liệu-thật).
+
+## Giới hạn mô hình
+
+MVP dùng profile tốc độ ô tô tĩnh `car-v1`. Thời gian trên UI là ước lượng.
+Mô hình tuân theo hướng cạnh trong graph. Các quy tắc cấm rẽ, chi phí rẽ, đèn tín hiệu
+và giao thông theo giờ chưa được mô hình hóa. Điểm gặp là node trong AOI và có thể
+nằm ở vị trí không phù hợp để dừng xe. Hệ thống chỉ tối ưu chiều đi.
+
+- **Phase 3** xử lý cấm rẽ và chi phí rẽ theo cạnh, bổ sung xe máy, hiệu chỉnh tốc độ
+  và thời gian tiếp cận, và lọc vị trí gặp không phù hợp.
+- **Phase 4** mở rộng sang điểm gặp giữa cạnh, gợi ý địa điểm thực tế, trọng số theo giờ
+  và nhóm dùng nhiều phương tiện.
 
 ## Cấu trúc mã nguồn
 

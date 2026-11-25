@@ -1,6 +1,7 @@
 """Exercise fresh and cached meeting-points requests on an offline CSR fixture."""
 
 import json
+import logging
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -349,6 +350,47 @@ def test_internal_error_keeps_coordinates_out_of_response_and_logs(
     assert request_id in caplog.text
     assert all(str(value) not in response.text and str(value) not in caplog.text
                for value in (latitude, longitude))
+
+
+def test_request_logs_use_route_templates_and_safe_metadata(
+    meeting_client: TestClient, caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="uvicorn.error.w2m")
+    lon, lat = TO_WGS84.transform(500004, 2300000)
+    secret = "synthetic-secret-m6"
+    body = {"origins": [
+        {"id": origin_id, "lon": lon, "lat": lat} for origin_id in ORIGIN_IDS
+    ]}
+    fresh = meeting_client.post(MEETING_URL, params={"token": secret}, json=body,
+                                headers={"Authorization": f"Bearer {secret}"})
+    assert fresh.status_code == 200
+    cache_id = fresh.json()["request_id"]
+    rerank = meeting_client.post(f"{MEETING_URL}/{cache_id}/rerank", json={"optimization": {}})
+    assert rerank.status_code == 200
+    unknown = meeting_client.get(f"/{secret}", params={"latitude": lat})
+    assert unknown.status_code == 404
+    rejected = meeting_client.post(MEETING_URL, json={**body, "token": secret})
+    assert rejected.status_code == 400
+
+    records = {}
+    for record in caplog.records:
+        message = record.getMessage()
+        if record.name == "uvicorn.error.w2m" and message.startswith("request "):
+            entry = json.loads(message.removeprefix("request "))
+            records[entry["request_id"]] = entry
+    for response, route in (
+        (fresh, MEETING_URL), (rerank, f"{MEETING_URL}/{{request_id}}/rerank"),
+        (unknown, None), (rejected, MEETING_URL),
+    ):
+        entry = records[response.headers["X-Request-ID"]]
+        assert entry["route"] == route
+        assert entry["status"] == response.status_code
+        assert entry["graph_version"] == "fixture-v1"
+        assert entry["weight_profile_version"] == "car-v1"
+        assert entry["server_ms"] >= 0
+        expected_timings = response.json().get("timings_ms")
+        assert entry["timings_ms"] == expected_timings
+    assert all(value not in caplog.text for value in (secret, cache_id, str(lat), str(lon)))
 
 
 @pytest.mark.parametrize(("lon", "lat", "code"), [

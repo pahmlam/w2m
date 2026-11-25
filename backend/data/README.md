@@ -1,5 +1,27 @@
 # Dữ liệu runtime
 
+## Nguồn dữ liệu và điều kiện phân phối
+
+Bundle nghiệm thu `hanoi-ring3-car-v1-3000-v1` dùng dữ liệu **© OpenStreetMap
+contributors** từ snapshot `ring3-20261106T092834Z-6000`, cutoff
+`2026-11-06T09:28:34Z`. Manifest snapshot ghi vùng truy vấn, checksum và
+giấy phép `ODbL-1.0`. Lấy đúng snapshot, polygon và profile `car-v1` để tái tạo.
+W2M hiển thị ghi công OSM trên bản đồ và trỏ tới trang giấy phép của nguồn.
+[Ghi công OpenStreetMap](https://www.openstreetmap.org/copyright) ·
+[Hướng dẫn ghi công của OSM Foundation](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines)
+
+GraphML và bộ CSR kèm ánh xạ/hình học lưu các phần dữ liệu đường OSM đã biến đổi.
+Khi rà soát phát hành, xử lý chúng như cơ sở dữ liệu dẫn xuất theo ODbL 1.0.
+Khi phân phối bundle, giữ ghi công và thông báo giấy phép cùng artifact. Khi
+sử dụng công khai cơ sở dữ liệu dẫn xuất hoặc sản phẩm tạo từ đó, đối chiếu mục
+4.4 và 4.6 về share-alike và cung cấp bản đọc được bằng máy của cơ sở dữ liệu
+dẫn xuất hoặc tập thay đổi theo giấy phép. Trường hợp dùng nội bộ được nêu tại
+mục 4.5(c). [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/)
+
+Nguồn tile bản đồ nền có điều khoản và ghi công riêng. Cấu hình mặc định của
+Compose dùng OpenFreeMap Positron. Kiểm tra điều khoản của nhà cung cấp được chọn
+trước khi mở ứng dụng công khai. [Cấu hình và nguồn tile](../../docs/plans/W2M-M6-Tile-Provider.md)
+
 Nguồn AOI thử nghiệm được version trong `backend/app/config/areas/hanoi-pilot-v1.geojson`.
 Từ thư mục gốc, chạy:
 
@@ -527,6 +549,77 @@ phạm vi snap được. Bản SVG kèm thống kê của lần nghiệm thu loc
 `pending_acceptance` trong validation là trạng thái tại lúc xuất bundle;
 kết quả TC-15 và quyết định rà soát sau đó được lưu riêng, không sửa báo cáo cũ.
 TC-16, hiệu chỉnh tốc độ và tích hợp API/runtime thuộc các mốc tiếp theo.
+
+## Đối chiếu thời gian trên dữ liệu thật
+
+Rà soát một mẫu tuyến có cầu vượt, nút giao và đường một chiều trên bundle nghiệm
+thu. Với mỗi ca, ghi mã ca, phiên bản graph/profile, kết quả quan sát về vị trí
+snap, hình học và chiều cạnh, cùng vị trí cần xem lại. Dùng tọa độ mẫu công khai
+hoặc tổng hợp. Báo cáo SCC `backend/data/reviews/hanoi-ring3-v1-3000-v2.json`
+ghi 404/1.797 node bị loại và 774/2.934 trung điểm cạnh bị loại cách đường giữ
+lại hơn 150 m. SVG cùng tên dùng để định vị vùng có nguy cơ snap thất bại.
+
+Đối chiếu ít nhất 100 tuyến trong ít nhất 25 nhóm đủ bốn tuyến tới cùng một điểm
+gặp. Dùng nhà cung cấp thời gian ô tô độc lập có quyền sử dụng và lưu số liệu
+cho mục đích kiểm chứng. Ghi tên nguồn, thời điểm truy vấn ngoài giờ cao điểm
+theo giờ Hà Nội, phiên bản graph/profile và cách chọn mẫu. Dùng cùng đầu mút
+snap và điểm gặp ở hai hệ thống để so phần đi ô tô.
+
+- Theo tuyến, ghi thời gian trên mạng của W2M, thời gian do dịch vụ độc lập
+  trả và chênh lệch có dấu `W2M - độc lập` theo giây. Báo cáo thêm sai số tuyệt
+  đối và ghi rõ các ca dịch vụ không trả được tuyến.
+- Theo nhóm, cộng cùng offset tiếp cận của từng người vào hai bộ thời gian
+  ô tô rồi tính `max(T) - min(T)` riêng cho mỗi bộ. Ghi chênh lệch giữa hai
+  giá trị đó để đánh giá mức sai lệch khi so độ công bằng.
+- Ghi kết luận giữ hoặc đổi speed profile dựa trên báo cáo. Nếu đổi, dùng
+  phiên bản profile mới và dựng lại graph.
+
+CLI offline chuẩn bị mẫu và tính sai lệch. Mặc định lấy 14 nhóm cho mỗi
+kịch bản gần, xa và sát biên từ bộ sinh mẫu TC-16. Mỗi nhóm dùng chung điểm
+gặp hạng 1 và bốn tuyến có chiều dài dương. Dữ liệu chỉ dùng điểm mẫu trên
+đường công khai. Giữ đủ nhóm dự phòng vì dịch vụ ngoài có thể snap khác.
+
+```sh
+PYTHONPATH=backend uv run --project backend --locked python -m scripts.validate_travel_time sample \
+  --bundle-dir backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
+  --output backend/data/reports/hanoi-travel-time-sample.json
+
+PYTHONPATH=backend uv run --project backend --locked python -m scripts.validate_travel_time compare \
+  --sample backend/data/reports/hanoi-travel-time-sample.json \
+  --observations backend/data/reports/hanoi-travel-time-reference.csv \
+  --source 'Tên nguồn tham chiếu' --kind off-peak \
+  --output backend/data/reports/hanoi-travel-time-off-peak.json
+```
+
+CSV có cột `route_id,reference_seconds,departure_at,reason`. Giữ `route_id`
+từ mẫu và truy vấn đúng `origin_lonlat` đến `destination_lonlat`.
+`departure_at` dùng ISO 8601 có múi giờ, ví dụ một giờ thấp điểm đã chọn như
+`13:30` ngày thường theo giờ Hà Nội. Bỏ trống `reference_seconds` và ghi
+`reason` nếu thiếu tuyến hoặc đầu mút dịch chuyển nhiều. Báo cáo ghi riêng
+ca thiếu và chỉ tính độ chênh cho nhóm có đủ bốn tuyến.
+
+Chế độ `--kind static` dành cho đối chiếu với bộ định tuyến thời gian tĩnh.
+OSRM của FOSSGIS dùng dữ liệu OSM và profile ô tô riêng. Dùng kết quả để phát
+hiện khác biệt giữa hai mô hình định tuyến trong bước rà soát sơ bộ.
+[OSRM của FOSSGIS](https://routing.openstreetmap.de/about.html) ·
+[Ghi công OpenStreetMap](https://www.openstreetmap.org/copyright) ·
+[Sửa bản đồ](https://www.openstreetmap.org/fixthemap)
+
+Lượt ngày 25/11 dùng seed `20261120` và đối chiếu đủ 168 tuyến trong 42 nhóm.
+Sai lệch snap của OSRM dưới 2,13 m. Sai lệch thời gian tuyến tuyệt đối trung vị là
+178,4 giây và sai lệch độ chênh trong nhóm tuyệt đối trung vị là 98,0 giây.
+W2M ước lượng lâu hơn OSRM trung bình 228,4 giây. Xem
+`backend/data/reports/hanoi-travel-time-osrm-20261125.json`. Kết quả tĩnh
+có thể phản ánh cả chênh lệch lộ trình và tốc độ.
+
+Lượt TomTom dùng cùng mẫu, với giờ khởi hành 13:30 ngày 26/11/2026 theo giờ Hà Nội.
+Báo cáo `backend/data/reports/hanoi-travel-time-tomtom-20261125.json` dùng
+thời gian từ dữ liệu giao thông lịch sử. MVP local giữ `car-v1`. Xem
+[journal nghiệm thu](../../docs/journals/mvp-done/2026-11-25-1557-validate-off-peak-travel-times.md)
+cho số liệu và cơ sở quyết định. [TomTom Calculate Route](https://docs.tomtom.com/routing-api/documentation/tomtom-maps/v1/calculate-route)
+
+Các phép đối chiếu này kiểm tra mô hình tĩnh trên mẫu đã chọn. Cấm rẽ và khả
+năng dự báo ETA thời gian thực cần bằng chứng riêng.
 
 ## Snapping tham chiếu — bước đầu M2
 

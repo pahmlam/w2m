@@ -87,6 +87,7 @@ async def meeting_points(body: MeetingRequest, request: Request) -> MeetingRespo
 
     response = _meeting_response(uuid4().hex, computation, body.optimization)
     request.app.state.meeting_routing_cache.put(response.request_id, computation.routing)
+    request.state.meeting_timings = computation.timings_ms
     return response
 
 
@@ -112,6 +113,7 @@ async def rerank(
         return JSONResponse(status_code=409, content=error.model_dump())
 
     computation = await service.rerank(routing, body.optimization)
+    request.state.meeting_timings = computation.timings_ms
     return _meeting_response(request_id, computation, body.optimization)
 
 

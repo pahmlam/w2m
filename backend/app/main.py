@@ -25,7 +25,7 @@ from app.services.csr_meeting_service import CSRMeetingService
 from app.services.graph_loader import load_csr_graph
 from app.services.meeting_routing_cache import MeetingRoutingCache
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error.w2m")
 
 
 def _container_resources() -> dict[str, str]:
@@ -58,7 +58,7 @@ def create_app() -> FastAPI:
             snapper = await asyncio.to_thread(CoordinateSnapper, graph, settings)
             index_finished = perf_counter()
         except (BadZipFile, EOFError, KeyError, OSError, ParseError, TypeError, ValueError) as exc:
-            logger.warning("CSR graph unavailable: %s", exc)
+            logger.warning("CSR graph unavailable (%s)", type(exc).__name__)
         else:
             service = CSRMeetingService(
                 graph, settings.csr_max_concurrent_tasks, snapper=snapper, routing_cache=cache,
@@ -83,6 +83,11 @@ def create_app() -> FastAPI:
                 }
             app.state.csr_graph = graph
             app.state.csr_meeting_service = service
+            logger.info(
+                "CSR graph ready graph=%s profile=%s load_ms=%.2f strtree_ms=%.2f",
+                graph.graph_version, graph.weight_profile_version,
+                (index_started - load_started) * 1000, snapper.tree_build_ms,
+            )
         try:
             yield
         finally:
@@ -97,17 +102,38 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_identity(request: Request, call_next):
+        started = perf_counter()
         request.state.request_id = uuid4().hex
+        error_type = None
         try:
             response = await call_next(request)
         except Exception as exc:
             # Exception messages may contain precise request coordinates.
-            logger.error("Request %s failed (%s)", request.state.request_id, type(exc).__name__)
+            error_type = type(exc).__name__
             response = JSONResponse(status_code=500, content={
                 "error_code": "INTERNAL_ERROR", "message": "Không thể xử lý yêu cầu.",
                 "request_id": request.state.request_id,
             })
         response.headers["X-Request-ID"] = request.state.request_id
+        # The registered template excludes the raw path/query and the rerank cache ID.
+        route = getattr(request.scope.get("route"), "path", None)
+        if response.status_code >= 400 or route not in {"/health", "/ready"}:
+            graph = getattr(request.app.state, "csr_graph", None)
+            timings = getattr(request.state, "meeting_timings", None)
+            record = {
+                "request_id": request.state.request_id,
+                "route": route,
+                "status": response.status_code,
+                "server_ms": round((perf_counter() - started) * 1000, 3),
+                "graph_version": graph.graph_version if graph is not None else None,
+                "weight_profile_version": (
+                    graph.weight_profile_version if graph is not None else None
+                ),
+                "timings_ms": timings.model_dump() if timings is not None else None,
+                "error_type": error_type,
+            }
+            level = logging.ERROR if response.status_code >= 500 else logging.INFO
+            logger.log(level, "request %s", json.dumps(record, separators=(",", ":")))
         return response
 
     @app.exception_handler(RequestValidationError)
