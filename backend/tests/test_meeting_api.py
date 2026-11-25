@@ -356,17 +356,26 @@ def test_request_logs_use_route_templates_and_safe_metadata(
     meeting_client: TestClient, caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.INFO, logger="uvicorn.error.w2m")
-    lon, lat = TO_WGS84.transform(500004, 2300000)
+    positions = [TO_WGS84.transform(500004, 2300000 - offset) for offset in (1, 2, 3, 4)]
     secret = "synthetic-secret-m6"
     body = {"origins": [
-        {"id": origin_id, "lon": lon, "lat": lat} for origin_id in ORIGIN_IDS
+        {"id": origin_id, "lon": lon, "lat": lat}
+        for origin_id, (lon, lat) in zip(ORIGIN_IDS, positions, strict=True)
     ]}
     fresh = meeting_client.post(MEETING_URL, params={"token": secret}, json=body,
                                 headers={"Authorization": f"Bearer {secret}"})
     assert fresh.status_code == 200
     cache_id = fresh.json()["request_id"]
-    rerank = meeting_client.post(f"{MEETING_URL}/{cache_id}/rerank", json={"optimization": {}})
+    rerank = meeting_client.post(
+        f"{MEETING_URL}/{cache_id}/rerank", json={"optimization": {"phi": 0}},
+    )
     assert rerank.status_code == 200
+    lon, lat = TO_WGS84.transform(500005, 2299950)
+    empty = meeting_client.post(MEETING_URL, json={
+        "origins": [{"id": origin_id, "lon": lon, "lat": lat} for origin_id in ORIGIN_IDS],
+        "optimization": {"max_travel_seconds": 300},
+    })
+    assert empty.status_code == 200 and empty.json()["status"] == "empty"
     unknown = meeting_client.get(f"/{secret}", params={"latitude": lat})
     assert unknown.status_code == 404
     rejected = meeting_client.post(MEETING_URL, json={**body, "token": secret})
@@ -380,7 +389,7 @@ def test_request_logs_use_route_templates_and_safe_metadata(
             records[entry["request_id"]] = entry
     for response, route in (
         (fresh, MEETING_URL), (rerank, f"{MEETING_URL}/{{request_id}}/rerank"),
-        (unknown, None), (rejected, MEETING_URL),
+        (empty, MEETING_URL), (unknown, None), (rejected, MEETING_URL),
     ):
         entry = records[response.headers["X-Request-ID"]]
         assert entry["route"] == route
@@ -390,7 +399,37 @@ def test_request_logs_use_route_templates_and_safe_metadata(
         assert entry["server_ms"] >= 0
         expected_timings = response.json().get("timings_ms")
         assert entry["timings_ms"] == expected_timings
-    assert all(value not in caplog.text for value in (secret, cache_id, str(lat), str(lon)))
+    for response, options in ((fresh, {}), (rerank, {"phi": 0}),
+                              (empty, {"max_travel_seconds": 300})):
+        entry = records[response.headers["X-Request-ID"]]["meeting_result"]
+        payload = response.json()
+        assert entry["status"] == payload["status"]
+        assert entry["optimization"] == Optimization(**options).model_dump()
+        assert entry["owa_weights"] == payload["objective"]["weights"]
+        assert entry["min_required_seconds"] == payload["min_required_seconds"]
+        assert entry["results"] == [
+            {
+                "rank": result["rank"],
+                "score_seconds": result["score"],
+                "min_seconds": result["min_time"],
+                "max_seconds": result["max_time"],
+                "avg_seconds": result["avg_time"],
+                "difference_seconds": result["difference"],
+                "travel_times_seconds": [result["travel_times"][key] for key in ORIGIN_IDS],
+                "routes": [
+                    {field: result["routes"][key][field] for field in (
+                        "access_seconds", "network_seconds", "duration_seconds",
+                    )}
+                    for key in ORIGIN_IDS
+                ],
+            }
+            for result in payload["results"]
+        ]
+    assert all("meeting_result" not in records[response.headers["X-Request-ID"]]
+               for response in (unknown, rejected))
+    assert all(value not in caplog.text for value in (secret, cache_id, *ORIGIN_IDS))
+    assert all(str(value) not in caplog.text for position in [*positions, (lon, lat)]
+               for value in position)
 
 
 @pytest.mark.parametrize(("lon", "lat", "code"), [

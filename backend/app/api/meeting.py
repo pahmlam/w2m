@@ -69,6 +69,41 @@ def _meeting_response(
     )
 
 
+def _record_meeting_result(
+    request: Request, response: MeetingResponse, optimization: Optimization,
+) -> None:
+    # Positions follow request order so the log can correlate times without storing origin IDs.
+    request.state.meeting_timings = response.timings_ms
+    request.state.meeting_result = {
+        "status": response.status,
+        "optimization": optimization.model_dump(),
+        "owa_weights": response.objective.weights,
+        "min_required_seconds": response.min_required_seconds,
+        "results": [
+            {
+                "rank": result.rank,
+                "score_seconds": result.score,
+                "min_seconds": result.min_time,
+                "max_seconds": result.max_time,
+                "avg_seconds": result.avg_time,
+                "difference_seconds": result.difference,
+                "travel_times_seconds": [
+                    result.travel_times[origin.id] for origin in response.origins
+                ],
+                "routes": [
+                    {
+                        "access_seconds": result.routes[origin.id].access_seconds,
+                        "network_seconds": result.routes[origin.id].network_seconds,
+                        "duration_seconds": result.routes[origin.id].duration_seconds,
+                    }
+                    for origin in response.origins
+                ],
+            }
+            for result in response.results
+        ],
+    }
+
+
 @router.post("/meeting-points", response_model=MeetingResponse,
              responses={422: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})
 async def meeting_points(body: MeetingRequest, request: Request) -> MeetingResponse | JSONResponse:
@@ -87,7 +122,7 @@ async def meeting_points(body: MeetingRequest, request: Request) -> MeetingRespo
 
     response = _meeting_response(uuid4().hex, computation, body.optimization)
     request.app.state.meeting_routing_cache.put(response.request_id, computation.routing)
-    request.state.meeting_timings = computation.timings_ms
+    _record_meeting_result(request, response, body.optimization)
     return response
 
 
@@ -113,8 +148,9 @@ async def rerank(
         return JSONResponse(status_code=409, content=error.model_dump())
 
     computation = await service.rerank(routing, body.optimization)
-    request.state.meeting_timings = computation.timings_ms
-    return _meeting_response(request_id, computation, body.optimization)
+    response = _meeting_response(request_id, computation, body.optimization)
+    _record_meeting_result(request, response, body.optimization)
+    return response
 
 
 @router.get("/map/config", response_model=MapConfig, responses={503: {"model": ErrorResponse}})

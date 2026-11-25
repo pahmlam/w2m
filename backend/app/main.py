@@ -132,6 +132,9 @@ def create_app() -> FastAPI:
                 "timings_ms": timings.model_dump() if timings is not None else None,
                 "error_type": error_type,
             }
+            meeting_result = getattr(request.state, "meeting_result", None)
+            if response.status_code == 200 and meeting_result is not None:
+                record["meeting_result"] = meeting_result
             level = logging.ERROR if response.status_code >= 500 else logging.INFO
             logger.log(level, "request %s", json.dumps(record, separators=(",", ":")))
         return response

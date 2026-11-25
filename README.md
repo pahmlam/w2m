@@ -212,9 +212,17 @@ roundtrip tương ứng sẽ bị bỏ qua. Không cần sinh lại lockfile khi
 **Terminal 1 — Backend**
 
 ```sh
+mkdir -p backend/data/logs
 W2M_GRAPH_DIR=backend/data/builds/hanoi-ring3-car-v1-3000-v1/validated \
   uv run --project backend --locked uvicorn app.main:app --app-dir backend --reload --port 8000 \
-  --no-access-log
+  --no-access-log 2>&1 | tee -a backend/data/logs/backend-dev.log
+```
+
+Log vẫn hiện trong terminal và được ghi nối tiếp vào `backend/data/logs/backend-dev.log`
+qua các lần chạy. Thư mục `backend/data/` được Git bỏ qua. Xem riêng log kết quả tìm điểm gặp bằng:
+
+```sh
+rg 'meeting_result' backend/data/logs/backend-dev.log
 ```
 
 **Terminal 2 — Frontend**
@@ -265,6 +273,18 @@ Bản ghi gồm mẫu route, status, phiên bản graph/profile, `server_ms` tí
 tạo phản hồi, và `timings_ms` nếu có kết quả tính toán. Log chuẩn dùng mẫu route cố định,
 bỏ URL thô, query, header, body, ID cache rerank và nội dung ngoại lệ. Luồng chạy Docker
 và development tắt access log mặc định của Uvicorn.
+
+Sau mỗi lần tìm điểm gặp hoặc xếp hạng lại, trường `meeting_result` ghi trạng thái,
+tham số tối ưu thực tế, trọng số OWA và các điểm đã trả theo thứ hạng. Mỗi điểm có
+điểm OWA, thống kê thời gian và thời gian tiếp cận, trên đường và tổng của từng tuyến.
+Hai mảng `travel_times_seconds` và `routes` cùng theo thứ tự vị trí trong request.
+Khi kết quả rỗng, log có `results: []` và `min_required_seconds`.
+Log chỉ dùng số liệu tính toán đã trả về API và không chứa tọa độ, ID node, ID nguồn
+hay hình học tuyến. Có thể dùng log để tính lại điểm OWA từ trọng số và thời gian đã
+ghi, đối chiếu tổng thời gian của tuyến và kiểm tra ngưỡng thời gian theo độ chính xác API.
+Để tái hiện đường đi, dùng một bộ tọa độ thử nghiệm biết trước với đúng phiên bản đồ thị.
+Khi chạy trực tiếp theo lệnh development, xem bản ghi trong `backend/data/logs/backend-dev.log`.
+Khi chạy bằng Docker, dùng `docker compose logs -f --timestamps backend`.
 
 Kiểm tra log khi chạy Docker bằng một request mẫu với cache ID không tồn tại.
 Phản hồi trả 409. Trong log, `request_id` khớp `X-Request-ID` và route hiện
