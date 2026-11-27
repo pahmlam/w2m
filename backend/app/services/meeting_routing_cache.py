@@ -21,6 +21,7 @@ ENTRY_OVERHEAD_BYTES = 8192
 class _Entry:
     routing: CSRRoutingResult
     objective_type: ObjectiveType
+    fixed_phi: float | None
     sources: dict[tuple[_SourceLocation, float], CSRSourcePaths]
     size_bytes: int
     expires_at: float
@@ -77,7 +78,7 @@ class MeetingRoutingCache:
 
     def put(
         self, request_id: str, routing: CSRRoutingResult,
-        *, objective_type: ObjectiveType = "owa_geometric",
+        *, objective_type: ObjectiveType = "owa_geometric", fixed_phi: float | None = None,
     ) -> None:
         """Store the full routing result under its response ID if it fits."""
         size_bytes = _routing_size_bytes(routing)
@@ -95,7 +96,7 @@ class MeetingRoutingCache:
             expires_at = monotonic() + self._ttl_seconds
             expiry = self._loop.call_later(self._ttl_seconds, self._expire, request_id)
             self._entries[request_id] = _Entry(
-                routing, objective_type, sources, size_bytes, expires_at, expiry,
+                routing, objective_type, fixed_phi, sources, size_bytes, expires_at, expiry,
             )
             self._size_bytes += size_bytes
             self._peak_bytes = max(self._peak_bytes, self._size_bytes)
@@ -105,7 +106,9 @@ class MeetingRoutingCache:
         cached = self.get_request(request_id)
         return cached[0] if cached is not None else None
 
-    def get_request(self, request_id: str) -> tuple[CSRRoutingResult, ObjectiveType] | None:
+    def get_request(
+        self, request_id: str,
+    ) -> tuple[CSRRoutingResult, ObjectiveType, float | None] | None:
         """Retrieve current tables and refresh recency without extending expiry."""
         with self._lock:
             entry = self._entries.get(request_id)
@@ -118,7 +121,7 @@ class MeetingRoutingCache:
                 return None
             self._entries.move_to_end(request_id)
             self._request_hits += 1
-            return entry.routing, entry.objective_type
+            return entry.routing, entry.objective_type, entry.fixed_phi
 
     def get_source(
         self, graph: CSRGraph, snap: SnapResult, cutoff_seconds: float,

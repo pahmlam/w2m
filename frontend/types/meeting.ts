@@ -15,16 +15,18 @@ export interface Optimization {
   min_spacing_meters: number;
 }
 
+export type SearchOptions = Omit<Optimization, "phi">;
+
 export type ObjectiveType = "owa_geometric" | "mean_spread_v1";
 
 export interface MeetingRequest {
   origins: Origin[];
   travel_mode: "car";
-  optimization?: Partial<Optimization> & { objective_type?: ObjectiveType };
+  optimization: Partial<SearchOptions> & { fairness_mode: ObjectiveType };
 }
 
 export interface RerankRequest {
-  optimization: Optimization & { objective_type?: ObjectiveType };
+  optimization: SearchOptions;
 }
 
 export type ErrorCode =

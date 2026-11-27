@@ -107,31 +107,13 @@ summary { font-weight: 800; }
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
 }
 .meeting-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; font-size: .78rem; }
-.fairness-control { display: grid; grid-template-columns: 1fr auto; align-content: start; gap: 5px; }
-.fairness-control label, .travel-controls strong { font-weight: 800; }
-.fairness-control output { padding: 0 7px; border-radius: 999px; background: #ffd3e5; font-weight: 800; }
-.fairness-control input, .fairness-endpoints { grid-column: 1 / -1; }
-.fairness-control input { appearance: none; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
-.fairness-control input::-webkit-slider-runnable-track {
-  height: 9px; border-radius: 999px; background: linear-gradient(90deg, #bfe3fb, #ffc2db 55%, #d9c9fb);
-}
-.fairness-control input::-moz-range-track {
-  height: 9px; border-radius: 999px; background: linear-gradient(90deg, #bfe3fb, #ffc2db 55%, #d9c9fb);
-}
-.fairness-control input::-webkit-slider-thumb {
-  appearance: none; width: 22px; height: 22px; margin-top: -6.5px;
-  border: 3px solid var(--accent); border-radius: 50%; background: #fff;
-}
-.fairness-control input::-moz-range-thumb {
-  width: 16px; height: 16px; border: 3px solid var(--accent); border-radius: 50%; background: #fff;
-}
-.fairness-endpoints { display: flex; justify-content: space-between; gap: 6px; color: var(--muted); }
+.fairness-control { align-self: start; }
+.travel-controls strong { font-weight: 800; }
 .time-presets, .advanced-options { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
 .time-presets button, .fairness-mode {
   border: 1px solid var(--line); border-radius: 999px; background: var(--cream);
   padding: 3px 7px; font-size: .75rem; font-weight: 800;
 }
-.fairness-mode { grid-column: 1 / -1; justify-self: start; }
 .time-presets button[aria-pressed="true"] { background: #ffd3e5; border-color: var(--accent); color: var(--accent); }
 .custom-time { margin: 4px 0; }
 .advanced-options label { display: flex; gap: 4px; align-items: center; }

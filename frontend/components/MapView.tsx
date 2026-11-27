@@ -14,7 +14,7 @@ import {
   DEFAULT_MEETING_OBJECTIVE, findMeetingPoints, loadMapConfig, rerankMeetingPoints,
   type MeetingMapConfig, type MeetingOutcome,
 } from "@/services/meetingApi";
-import type { Location, ObjectiveType, Optimization } from "@/types/meeting";
+import type { Location, ObjectiveType, SearchOptions } from "@/types/meeting";
 import { basemapSettings, outsideAoiMask } from "@/utils/basemap";
 import { coordinateBounds, ORIGIN_COLORS, formatMinutes } from "@/utils/meetingDisplay";
 import { parseTravelLimit, parseSpacing } from "@/utils/meetingOptions";
@@ -71,7 +71,6 @@ export default function MapView() {
   const [search, setSearch] = useState<MeetingSearch>({ status: "idle" });
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [hiddenRoutes, setHiddenRoutes] = useState<ReadonlySet<OriginId>>(() => new Set());
-  const [changedPhi, setChangedPhi] = useState<number>();
   const [changedTime, setChangedTime] = useState<string>();
   const [changedCount, setChangedCount] = useState<number>();
   const [changedSpacing, setChangedSpacing] = useState<string>();
@@ -89,17 +88,16 @@ export default function MapView() {
   const placedCount = Object.keys(locations).length;
   const config = coverage.status === "ready" ? coverage.config : null;
   const options = config ? {
-    phi: changedPhi ?? config.defaults.phi,
     time: changedTime ?? String(config.defaults.max_travel_seconds),
     count: changedCount ?? config.defaults.top_k,
     spacing: changedSpacing ?? String(config.defaults.min_spacing_meters),
   } : null;
-  function readOptions(values: NonNullable<typeof options>): Optimization | null {
+  function readOptions(values: NonNullable<typeof options>): SearchOptions | null {
     if (!config) return null;
     const seconds = parseTravelLimit(values.time, config.limits.max_travel_seconds);
     const spacing = parseSpacing(values.spacing, config.limits.min_spacing_meters);
     if (seconds === null || spacing === null) return null;
-    return { phi: values.phi, max_travel_seconds: seconds, top_k: values.count, min_spacing_meters: spacing };
+    return { max_travel_seconds: seconds, top_k: values.count, min_spacing_meters: spacing };
   }
   const optimization = options && readOptions(options);
   const canFindMeeting = placedCount === ORIGIN_IDS.length && draft === null && optimization !== null;
@@ -170,7 +168,7 @@ export default function MapView() {
   });
 
   async function calculateMeeting(
-    settings: Optimization, requestId?: string, objective: ObjectiveType = objectiveType,
+    settings: SearchOptions, requestId?: string, objective: ObjectiveType = objectiveType,
   ) {
     if (!config || draft !== null || pendingMeeting.current) return;
     const { aoi } = config;
@@ -188,10 +186,9 @@ export default function MapView() {
     }
     setSearch({ status: "loading", reranking: requestId !== undefined });
     try {
-      const optimization = { ...settings, objective_type: objective };
       const outcome = requestId
-        ? await rerankMeetingPoints(requestId, origins, optimization, request.signal)
-        : await findMeetingPoints(origins, request.signal, optimization);
+        ? await rerankMeetingPoints(requestId, origins, settings, request.signal, objective)
+        : await findMeetingPoints(origins, request.signal, settings, objective);
       if (!request.signal.aborted) {
         cachedRequest.current = { id: outcome.requestId, objectiveType: objective };
         setSelectedNodeId((current) => {
@@ -470,7 +467,6 @@ export default function MapView() {
           {config && options && (
             <MeetingOptions limits={config.limits} values={options} objectiveType={objectiveType}
               onToggleObjective={toggleObjective} onChange={(next) => {
-                setChangedPhi(next.phi);
                 setChangedTime(next.time);
                 setChangedCount(next.count);
                 setChangedSpacing(next.spacing);

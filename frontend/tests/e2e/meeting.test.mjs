@@ -97,14 +97,16 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   await setPositions(page, nearPositions);
   await page.getByText("Custom limit", { exact: true }).click();
   await page.getByRole("spinbutton", { name: "Max travel (seconds)" }).fill("900");
-  const slider = page.getByRole("slider", { name: "Fairness" });
-  await slider.press("Home");
+  assert.equal(await page.getByRole("slider").count(), 0);
   const initial = waitForPost(page);
   await find.press("Enter");
   const response = await initial;
   assert.equal(response.status(), 200);
   const meeting = await response.json();
-  assert.deepEqual(meeting.objective, { type: "mean_spread_v1", phi: 0 });
+  assert.deepEqual(meeting.objective, { type: "mean_spread_v1", phi: 1 });
+  const initialOptions = response.request().postDataJSON().optimization;
+  assert.equal(initialOptions.fairness_mode, "mean_spread_v1");
+  assert.equal("phi" in initialOptions, false);
   const status = page.locator("#meeting-status");
   await status.filter({ hasText: `${meeting.results.length} spots found.` }).waitFor();
   assert.ok(meeting.results.length > 0 && meeting.results.length <= 5);
@@ -131,15 +133,7 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   await page.getByRole("link", { name: "View map" }).press("Enter");
   assert.equal(await page.locator(":focus").getAttribute("id"), "meeting-map");
 
-  const reranking = waitForPost(page, `${meetingPath}/${meeting.request_id}/rerank`);
-  await slider.press("ArrowRight");
-  await slider.press("ArrowRight");
-  const reranked = await (await reranking).json();
-  assert.deepEqual(reranked.objective, { type: "mean_spread_v1", phi: 0.2 });
-  assert.equal(reranked.timings_ms.dijkstra, 0);
-  await status.filter({ hasText: /spots found/ }).waitFor();
-
-  if (reranked.results.length >= 2) {
+  if (meeting.results.length >= 2) {
     await page.getByRole("button", { name: "Spot #2", exact: true }).click();
     assert.equal(await page.getByRole("button", { name: "Spot 2 on the map" }).getAttribute("aria-pressed"), "true");
   }
@@ -153,8 +147,11 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   await spacing.fill("500.5");
   const advancedResponse = await advanced;
   const advancedBody = await advancedResponse.json();
+  assert.equal(advancedResponse.status(), 200, JSON.stringify(advancedBody));
   assert.equal(advancedResponse.request().postDataJSON().optimization.top_k, 2);
   assert.equal(advancedResponse.request().postDataJSON().optimization.min_spacing_meters, 500.5);
+  assert.deepEqual(advancedBody.objective, { type: "mean_spread_v1", phi: 1 });
+  assert.equal("phi" in advancedResponse.request().postDataJSON().optimization, false);
   assert.equal(advancedBody.timings_ms.dijkstra, 0);
   assert.ok(advancedBody.results.length <= 2);
   await status.filter({ hasText: /spots found/ }).waitFor();
@@ -163,22 +160,21 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   await page.getByRole("button", { name: "Mode · Similar travel times" }).press("Enter");
   const owa = await (await switchToOwa).json();
   assert.equal(owa.objective.type, "owa_geometric");
-  assert.equal(owa.objective.phi, 0.2);
-  assert.equal(await slider.inputValue(), "0.2");
+  assert.equal(owa.objective.phi, 0);
+  assert.deepEqual(owa.objective.weights, [0.25, 0.25, 0.25, 0.25]);
   await status.filter({ hasText: /spots found/ }).waitFor();
 
   const rerankOwa = waitForPost(page, `${meetingPath}/${owa.request_id}/rerank`);
-  await slider.press("ArrowRight");
+  await spacing.fill("501");
   const rerankedOwa = await (await rerankOwa).json();
   assert.equal(rerankedOwa.objective.type, "owa_geometric");
-  assert.equal(rerankedOwa.objective.phi, 0.3);
+  assert.equal(rerankedOwa.objective.phi, 0);
   assert.equal(rerankedOwa.timings_ms.dijkstra, 0);
   await status.filter({ hasText: /spots found/ }).waitFor();
 
   const switchToMeanSpread = waitForPost(page);
-  await page.getByRole("button", { name: "Mode · Prioritize longest trip" }).click();
-  assert.deepEqual((await (await switchToMeanSpread).json()).objective, { type: "mean_spread_v1", phi: 0.3 });
-  assert.equal(await slider.inputValue(), "0.3");
+  await page.getByRole("button", { name: "Mode · Fastest for the group" }).click();
+  assert.deepEqual((await (await switchToMeanSpread).json()).objective, { type: "mean_spread_v1", phi: 1 });
   await status.filter({ hasText: /spots found/ }).waitFor();
 
   await selectPerson(page, "D");

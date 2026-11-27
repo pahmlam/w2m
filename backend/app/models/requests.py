@@ -1,6 +1,13 @@
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from app.config.settings import (
     MAX_TRAVEL_SECONDS_BOUNDS,
@@ -52,10 +59,32 @@ class MeetingOptimization(Optimization):
         return value
 
 
+class CreateMeetingOptimization(MeetingOptimization):
+    fairness_mode: ObjectiveType | None = None
+
+    @model_validator(mode="after")
+    def validate_fairness_mode(self) -> "CreateMeetingOptimization":
+        if "fairness_mode" in self.model_fields_set and (
+            self.fairness_mode is None or self.model_fields_set & {"phi", "objective_type"}
+        ):
+            raise ValueError("fairness_mode requires a mode and replaces phi and objective_type")
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_request_options(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        options = handler(self)
+        if self.fairness_mode is None:
+            options.pop("fairness_mode", None)
+        else:
+            options.pop("phi", None)
+            options.pop("objective_type", None)
+        return options
+
+
 class MeetingRequest(ContractModel):
     origins: Annotated[list[Origin], Field(min_length=4, max_length=4)]
     travel_mode: Literal["car"] = "car"
-    optimization: MeetingOptimization = Field(default_factory=MeetingOptimization)
+    optimization: CreateMeetingOptimization = Field(default_factory=CreateMeetingOptimization)
 
     @model_validator(mode="after")
     def unique_origin_ids(self) -> "MeetingRequest":

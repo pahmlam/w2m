@@ -5,14 +5,19 @@ from math import fsum
 import numpy as np
 
 from app.services.meeting_optimizer import _score_csr_mean_spread, rank_mean_spread_reference
+from app.services.objective import owa_weights, score_candidate
 
 
-def test_p3_f01_ranks_a_tradeoff_at_all_slider_steps() -> None:
+def test_p3_f01_ranks_a_tradeoff_across_phi_values() -> None:
     first = (495.7, 141.6, 294.7, 516.6)
     dominated = (536.1, 376.5, 507.7, 530.9)
     balanced = (536.1, 376.5, 507.7, 510.9)
     times = [first, dominated, balanced]
     ids = np.array([1, 2, 3])
+    weights = owa_weights(0.0, len(first))
+    assert score_candidate(1, first, weights).sort_key < score_candidate(
+        3, balanced, weights,
+    ).sort_key
     previous_average = 0.0
     previous_spread = float("inf")
     for step in range(11):

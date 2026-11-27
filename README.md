@@ -237,9 +237,9 @@ npm --prefix frontend run dev
 Trang chính tải AOI từ `GET /api/v1/map/config` và căn bản đồ theo phạm vi này.
 Nếu graph chưa sẵn sàng, bấm **Try again** sau khi `GET /ready` trả 200.
 Đặt đủ bốn vị trí A–D rồi bấm **Find a spot** để xem danh sách theo thứ hạng từ backend.
-Bấm nút **Mode** bên dưới slider để chuyển giữa ưu tiên thời gian đi gần nhau và
-ưu tiên người đi lâu nhất. Khi đã có lượt tìm, đổi chế độ cập nhật kết quả với
-cùng giá trị `phi`.
+Bấm nút **Mode** để chuyển giữa **Similar travel times** (`mean_spread_v1`,
+`phi = 1.0`) và **Fastest for the group** (OWA, `phi = 0.0`). Khi đã có lượt
+tìm, đổi chế độ tự cập nhật kết quả.
 
 ### Bản đồ nền local
 

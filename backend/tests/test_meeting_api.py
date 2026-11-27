@@ -475,6 +475,54 @@ def test_mean_spread_opt_in_preserves_objective_on_rerank(
     assert entry["objective_type"] == "mean_spread_v1" and "owa_weights" not in entry
 
 
+@pytest.mark.parametrize(("mode", "phi", "score_field"), [
+    ("mean_spread_v1", 1.0, "difference"),
+    ("owa_geometric", 0.0, "avg_time"),
+])
+def test_fixed_fairness_mode(
+    meeting_client: TestClient, mode: str, phi: float, score_field: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="uvicorn.error.w2m")
+    lon, lat = TO_WGS84.transform(500004, 2300000)
+    body = {"origins": [{"id": label, "lon": lon, "lat": lat} for label in ORIGIN_IDS]}
+    options = {"fairness_mode": mode}
+    response = meeting_client.post(MEETING_URL, json={**body, "optimization": options})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["objective"]["type"] == mode
+    assert payload["objective"]["phi"] == phi
+    assert payload["results"]
+    assert all(result["score"] == result[score_field] for result in payload["results"])
+    if mode == "owa_geometric":
+        assert payload["objective"]["weights"] == [0.25] * 4
+
+    path = f"{MEETING_URL}/{payload['request_id']}/rerank"
+    reranked = meeting_client.post(path, json={"optimization": {"top_k": 1}})
+    assert reranked.status_code == 200
+    assert reranked.json()["objective"] == payload["objective"]
+    assert reranked.json()["timings_ms"]["dijkstra"] == 0
+    for invalid in ({"phi": 0.2}, options):
+        rejected = meeting_client.post(path, json={"optimization": invalid})
+        assert rejected.status_code == 400
+        assert rejected.json()["error_code"] == "INVALID_PARAMETERS"
+
+    for override in ({"objective_type": mode}, {"phi": phi}):
+        rejected = meeting_client.post(
+            MEETING_URL, json={**body, "optimization": {**options, **override}},
+        )
+        assert rejected.status_code == 400
+        assert rejected.json()["error_code"] == "INVALID_PARAMETERS"
+
+    request_ids = {response.headers["X-Request-ID"], reranked.headers["X-Request-ID"]}
+    entries = [json.loads(record.getMessage().removeprefix("request ")) for record in caplog.records
+               if record.getMessage().startswith("request ")]
+    logged = [entry["meeting_result"] for entry in entries if entry["request_id"] in request_ids]
+    assert len(logged) == 2
+    assert all(entry["objective_type"] == mode and entry["optimization"]["phi"] == phi
+               for entry in logged)
+
+
 @pytest.mark.parametrize(("lon", "lat", "code"), [
     (107.0, 20.8, "OUT_OF_COVERAGE"),
     (105.1, 20.8, "SNAP_FAILED"),

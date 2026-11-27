@@ -1,10 +1,8 @@
 import type { MeetingMapConfig } from "@/services/meetingApi";
 import type { ObjectiveType } from "@/types/meeting";
-import { FAIRNESS_STEP, fairnessAtStep, parseSpacing, parseTravelLimit } from "@/utils/meetingOptions";
+import { parseSpacing, parseTravelLimit } from "@/utils/meetingOptions";
 
-const fairnessNumber = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 20 });
-
-interface OptionValues { phi: number; time: string; count: number; spacing: string }
+interface OptionValues { time: string; count: number; spacing: string }
 
 export default function MeetingOptions({ limits, values, onChange, objectiveType, onToggleObjective }: {
   limits: MeetingMapConfig["limits"];
@@ -13,41 +11,16 @@ export default function MeetingOptions({ limits, values, onChange, objectiveType
   objectiveType: ObjectiveType;
   onToggleObjective: () => void;
 }) {
-  const { phi, time: timeInput, count, spacing } = values;
-  const onPhiChange = (value: number) => onChange({ ...values, phi: value });
+  const { time: timeInput, count, spacing } = values;
   const onTimeChange = (value: string) => onChange({ ...values, time: value });
   const validTime = parseTravelLimit(timeInput, limits.max_travel_seconds) !== null;
   const validSpacing = parseSpacing(spacing, limits.min_spacing_meters) !== null;
-  const steps = (phi - limits.phi.min) / FAIRNESS_STEP;
-  const offStep = Math.abs(steps - Math.round(steps)) > 1e-9;
   const time = limits.max_travel_seconds;
   return (
     <div className="meeting-options">
       <div className="fairness-control">
-        <label htmlFor="meeting-fairness">Fairness</label>
-        <output htmlFor="meeting-fairness">{fairnessNumber.format(phi)}</output>
-        <input id="meeting-fairness" type="range" min={limits.phi.min} max={limits.phi.max}
-          step={offStep ? "any" : FAIRNESS_STEP} value={phi} aria-valuetext={fairnessNumber.format(phi)}
-          aria-describedby="fairness-endpoints"
-          onChange={(event) => {
-            const next = event.currentTarget.valueAsNumber;
-            const tick = Math.round((next - limits.phi.min) / FAIRNESS_STEP);
-            onPhiChange(next === limits.phi.max ? next : fairnessAtStep(tick, limits.phi));
-          }}
-          onKeyDown={(event) => {
-            // A backend default may be between slider steps. Move to the adjacent step on the first arrow press.
-            if (!offStep) return;
-            if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-              event.preventDefault();
-              onPhiChange(fairnessAtStep(Math.floor(steps) + 1, limits.phi));
-            } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-              event.preventDefault();
-              onPhiChange(fairnessAtStep(Math.ceil(steps) - 1, limits.phi));
-            }
-          }} />
-        <div className="fairness-endpoints" id="fairness-endpoints"><span>Shortest average time</span><span>More fairness</span></div>
         <button className="fairness-mode" type="button" title="Switch fairness mode" onClick={onToggleObjective}>
-          {objectiveType === "owa_geometric" ? "Mode · Prioritize longest trip" : "Mode · Similar travel times"}
+          {objectiveType === "owa_geometric" ? "Mode · Fastest for the group" : "Mode · Similar travel times"}
         </button>
       </div>
       <div className="travel-controls">

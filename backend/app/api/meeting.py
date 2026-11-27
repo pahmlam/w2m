@@ -28,6 +28,8 @@ from app.services.coordinate_snapper import SnapError
 from app.services.csr_meeting_service import CSRMeetingComputation
 from app.services.objective import quantize_seconds
 
+FIXED_PHI_BY_MODE = {"owa_geometric": 0.0, "mean_spread_v1": 1.0}
+
 router = APIRouter(prefix="/api/v1", responses={
     400: {"model": ErrorResponse},
     "4XX": {"model": ErrorResponse},
@@ -80,7 +82,10 @@ def _record_meeting_result(
     request.state.meeting_timings = response.timings_ms
     request.state.meeting_result = {
         "status": response.status,
-        "optimization": optimization.model_dump(exclude={"objective_type"}),
+        "optimization": {
+            **optimization.model_dump(exclude={"objective_type", "fairness_mode"}),
+            "phi": optimization.phi,
+        },
         "objective_type": response.objective.type,
         **({"owa_weights": response.objective.weights}
            if isinstance(response.objective, Objective) else {}),
@@ -119,6 +124,15 @@ async def meeting_points(body: MeetingRequest, request: Request) -> MeetingRespo
     if graph is None or service is None:
         return unavailable(request)
 
+    optimization = body.optimization
+    fixed_phi = None
+    if optimization.fairness_mode is not None:
+        fixed_phi = FIXED_PHI_BY_MODE[optimization.fairness_mode]
+        optimization = optimization.model_copy(update={
+            "objective_type": optimization.fairness_mode, "phi": fixed_phi,
+        })
+        body = body.model_copy(update={"optimization": optimization})
+
     try:
         computation = await service.compute_request(body)
     except SnapError as exc:
@@ -126,11 +140,12 @@ async def meeting_points(body: MeetingRequest, request: Request) -> MeetingRespo
                               request_id=request.state.request_id)
         return JSONResponse(status_code=422, content=error.model_dump())
 
-    response = _meeting_response(uuid4().hex, computation, body.optimization)
+    response = _meeting_response(uuid4().hex, computation, optimization)
     request.app.state.meeting_routing_cache.put(
-        response.request_id, computation.routing, objective_type=body.optimization.objective_type,
+        response.request_id, computation.routing,
+        objective_type=optimization.objective_type, fixed_phi=fixed_phi,
     )
-    _record_meeting_result(request, response, body.optimization)
+    _record_meeting_result(request, response, optimization)
     return response
 
 
@@ -146,7 +161,7 @@ async def rerank(
         return unavailable(request)
 
     cached = request.app.state.meeting_routing_cache.get_request(request_id)
-    routing, objective_type = cached if cached is not None else (None, None)
+    routing, objective_type, fixed_phi = cached if cached is not None else (None, None, None)
     optimization = body.optimization
     if (routing is None or routing.graph is not graph
             or optimization.max_travel_seconds > routing.max_travel_seconds
@@ -159,7 +174,18 @@ async def rerank(
         )
         return JSONResponse(status_code=409, content=error.model_dump())
 
-    optimization = optimization.model_copy(update={"objective_type": objective_type})
+    if fixed_phi is not None and "phi" in optimization.model_fields_set:
+        error = ErrorResponse(
+            error_code="INVALID_PARAMETERS",
+            message="Chế độ này dùng giá trị phi cố định.",
+            request_id=request.state.request_id,
+        )
+        return JSONResponse(status_code=400, content=error.model_dump())
+
+    optimization = optimization.model_copy(update={
+        "objective_type": objective_type,
+        "phi": optimization.phi if fixed_phi is None else fixed_phi,
+    })
     computation = await service.rerank(routing, optimization)
     response = _meeting_response(request_id, computation, optimization)
     _record_meeting_result(request, response, optimization)
