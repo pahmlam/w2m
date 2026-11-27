@@ -16,22 +16,24 @@ export default function MeetingOptions({ limits, values, onChange, objectiveType
   const validTime = parseTravelLimit(timeInput, limits.max_travel_seconds) !== null;
   const validSpacing = parseSpacing(spacing, limits.min_spacing_meters) !== null;
   const time = limits.max_travel_seconds;
+  const presets = [10, 20, 30, 60, 120].filter((min) => min * 60 >= time.min && min * 60 <= time.max);
+  const travelSeconds = Number(timeInput);
   return (
     <div className="meeting-options">
-      <div className="fairness-control">
-        <button className="fairness-mode" type="button" title="Switch fairness mode" onClick={onToggleObjective}>
-          {objectiveType === "owa_geometric" ? "Mode · Fastest for the group" : "Mode · Similar travel times"}
-        </button>
-      </div>
+      <button className="fairness-mode" type="button" title="Switch fairness mode" onClick={onToggleObjective}>
+        {objectiveType === "owa_geometric" ? "Mode · Fastest for the group" : "Mode · Similar travel times"}
+      </button>
       <div className="travel-controls">
         <strong>Max travel per person</strong>
         <div className="time-presets" role="group" aria-label="Maximum travel time presets">
-          {[10, 20, 30, 60, 120].filter((min) => min * 60 >= time.min && min * 60 <= time.max)
-            .map((min) => <button key={min} type="button" aria-pressed={validTime && Number(timeInput) === min * 60}
+          {presets.map((min) => <button key={min} type="button" aria-pressed={validTime && travelSeconds === min * 60}
               onClick={() => onTimeChange(String(min * 60))}>{min} min</button>)}
         </div>
-        <details className="custom-time">
-          <summary>Custom limit</summary>
+        {validTime && !presets.includes(travelSeconds / 60) && <span className="custom-limit">{travelSeconds} s</span>}
+      </div>
+      <details className="search-settings">
+        <summary>More options</summary>
+        <div className="custom-time">
           <label htmlFor="meeting-time">Max travel (seconds)</label>
           <input id="meeting-time" type="number" min={time.min} max={time.max} step={1} value={timeInput}
             aria-invalid={!validTime} aria-describedby="meeting-time-hint"
@@ -39,7 +41,7 @@ export default function MeetingOptions({ limits, values, onChange, objectiveType
           <small id="meeting-time-hint" className={validTime ? undefined : "origin-error"}>
             {validTime ? `${time.min}–${time.max} seconds` : `Enter whole seconds from ${time.min} to ${time.max}.`}
           </small>
-        </details>
+        </div>
         <div className="advanced-options">
           <label>Results <select value={count} onChange={(event) => onChange({ ...values, count: Number(event.target.value) })}>
             {Array.from({ length: limits.top_k.max - limits.top_k.min + 1 }, (_, i) => i + limits.top_k.min)
@@ -53,7 +55,7 @@ export default function MeetingOptions({ limits, values, onChange, objectiveType
         {!validSpacing && <small id="spacing-error" className="origin-error">
           Enter a spacing from {limits.min_spacing_meters.min} to {limits.min_spacing_meters.max} m.
         </small>}
-      </div>
+      </details>
     </div>
   );
 }

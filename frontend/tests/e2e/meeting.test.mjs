@@ -95,8 +95,13 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   assert.equal(await page.getByRole("textbox", { name: "Latitude" }).getAttribute("aria-invalid"), "true");
   await page.getByRole("alert").filter({ hasText: /outside the supported area/ }).waitFor();
   await setPositions(page, nearPositions);
-  await page.getByText("Custom limit", { exact: true }).click();
-  await page.getByRole("spinbutton", { name: "Max travel (seconds)" }).fill("900");
+  const dock = page.getByRole("region", { name: "Search options" });
+  const moreOptions = dock.getByText("More options", { exact: true });
+  const customTime = dock.getByRole("spinbutton", { name: "Max travel (seconds)" });
+  assert.equal(await customTime.isVisible(), false);
+  assert.ok((await dock.boundingBox()).height <= 64);
+  await moreOptions.click();
+  await customTime.fill("900");
   assert.equal(await page.getByRole("slider").count(), 0);
   const initial = waitForPost(page);
   await find.press("Enter");
@@ -201,6 +206,12 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   await status.filter({ hasText: /spots found/ }).waitFor();
 
   await page.setViewportSize({ width: 390, height: 820 });
+  await moreOptions.click();
+  assert.equal(await customTime.isVisible(), false);
+  await dock.getByText("900 s", { exact: true }).waitFor();
+  const narrowDock = await dock.boundingBox();
+  const narrowFind = await find.boundingBox();
+  assert.ok(narrowFind.x >= narrowDock.x && narrowFind.x + narrowFind.width <= narrowDock.x + narrowDock.width);
   const narrowMap = await page.locator("#meeting-map").boundingBox();
   const narrowControls = await page.locator("#origin-controls").boundingBox();
   assert.ok(narrowControls.y > narrowMap.y + narrowMap.height);
@@ -214,7 +225,7 @@ test("real empty response suggests a higher cutoff and the change recalculates a
   const page = await openPage(t);
   await expectConfig(page, () => page.goto(frontendUrl));
   await setPositions(page, farPositions);
-  await page.getByText("Custom limit", { exact: true }).click();
+  await page.getByText("More options", { exact: true }).click();
   await page.getByRole("spinbutton", { name: "Max travel (seconds)" }).fill("300");
   const initial = waitForPost(page);
   await page.getByRole("button", { name: "Find a spot", exact: true }).click();
@@ -310,6 +321,7 @@ test("readiness and meeting errors allow retry, and a late response cannot repla
   await page.getByText("0/4 friends placed.").waitFor();
   assert.equal(await page.locator(".origin-marker, .meeting-marker").count(), 0);
   assert.equal(await page.locator(":focus").getAttribute("id"), "friend-A");
+  await page.getByText("More options", { exact: true }).click();
   assert.equal(await page.getByRole("combobox", { name: "Results" }).inputValue(),
     String(response.request().postDataJSON().optimization.top_k));
 });

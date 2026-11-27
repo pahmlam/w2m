@@ -102,29 +102,37 @@ summary { font-weight: 800; }
 .snap-details dl div { display: flex; gap: 8px; }
 .snap-details dd span { display: block; }
 .search-dock {
-  grid-area: map; align-self: end; justify-self: center; z-index: 6; width: min(758px, calc(100% - 38px));
-  margin-bottom: 62px; padding: 12px 14px; border-radius: 24px; background: #fff; box-shadow: var(--shadow);
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
+  grid-area: map; align-self: end; justify-self: center; z-index: 6; width: fit-content; max-width: calc(100% - 32px);
+  margin-bottom: 62px; padding: 8px; border: 1px solid var(--line); border-radius: 20px; background: #fff;
+  box-shadow: var(--shadow);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; align-items: start;
 }
-.meeting-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; font-size: .78rem; }
-.fairness-control { align-self: start; }
-.travel-controls strong { font-weight: 800; }
-.time-presets, .advanced-options { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
-.time-presets button, .fairness-mode {
-  border: 1px solid var(--line); border-radius: 999px; background: var(--cream);
-  padding: 3px 7px; font-size: .75rem; font-weight: 800;
+.meeting-options, .travel-controls, .time-presets, .advanced-options {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
 }
+.meeting-options { gap: 8px; font-size: .78rem; }
+.travel-controls strong { color: var(--muted); }
+.time-presets button, .fairness-mode, .search-settings summary {
+  padding: 5px 8px; font-size: .75rem; font-weight: 800;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--cream);
+}
+.fairness-mode { min-height: 38px; background: #fff0f6; color: var(--accent); }
 .time-presets button[aria-pressed="true"] { background: #ffd3e5; border-color: var(--accent); color: var(--accent); }
-.custom-time { margin: 4px 0; }
+.custom-limit { font-weight: 800; color: var(--accent); }
+.search-settings { min-width: 0; }
+.search-settings[open] { flex-basis: 100%; padding-top: 6px; border-top: 1px solid var(--line); }
+.search-settings summary { width: fit-content; }
+.custom-time { width: fit-content; max-width: 100%; margin: 8px 0; }
 .advanced-options label { display: flex; gap: 4px; align-items: center; }
 .advanced-options select { width: 44px; }
 .advanced-options input { width: 67px; }
 .find-meeting {
-  padding: 10px 16px; border: 0; border-radius: 16px; font-weight: 800; color: #fff;
+  min-height: 38px; padding: 6px 14px; border: 0; border-radius: 12px; font-weight: 800; color: #fff;
   background: linear-gradient(135deg, #ba3874, #a42964); box-shadow: 0 6px 12px #a4296430;
 }
 .find-meeting:disabled, .find-meeting[aria-disabled="true"] { background: #f0dce5; color: #765265; box-shadow: none; }
-.search-dock > p { grid-column: 1 / -1; font-size: .8rem; }
+.search-dock > p { grid-column: 1 / -1; margin: 0; font-size: .8rem; }
+.search-dock > .search-feedback:empty { position: absolute; }
 .meeting-results ol { list-style: none; display: grid; gap: 9px; padding: 0; margin: 0; }
 .meeting-results li { padding: 10px; border: 2px solid var(--line); border-radius: 18px; }
 .meeting-results .spot-selected { border-color: #e178a8; background: linear-gradient(#fff0f6, #fff); }
@@ -172,7 +180,7 @@ dd { margin: 0; }
   .meeting-layout { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-areas: "map" "crew" "dock" "results"; grid-template-rows: auto; }
   .meeting-map { grid-template-rows: auto auto; }
   .map { height: max(320px, 52dvh); }
-  .search-dock { grid-area: dock; width: 100%; margin: 0; }
+  .search-dock { grid-area: dock; width: 100%; max-width: 100%; margin: 0; }
   .map-chip { display: none; }
   .state-chip { margin-inline-start: auto; }
 }
@@ -180,7 +188,7 @@ dd { margin: 0; }
   .app-shell { padding: 0 12px 20px; }
   .app-header { padding-block: 8px; gap: 6px 10px; }
   .state-chip { margin-inline-start: 0; }
-  .search-dock, .meeting-options { grid-template-columns: minmax(0, 1fr); }
+  .search-dock { grid-template-columns: minmax(0, 1fr); }
   .map-hint { max-width: calc(100% - 64px); }
 }
 @media (prefers-reduced-motion: reduce) { .mascot { animation: none; } }
