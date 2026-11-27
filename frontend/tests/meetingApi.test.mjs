@@ -18,7 +18,8 @@ const first = {
   routes,
 };
 const second = { ...first, rank: 2, node_id: -3, score: 115, location: { lat: 21.04, lon: 105.83 } };
-const success = { request_id: "cached", status: "success", origins: snaps, results: [first] };
+const objective = { type: "mean_spread_v1", phi: 0.5 };
+const success = { request_id: "cached", status: "success", objective, origins: snaps, results: [first] };
 const optimization = { phi: 0.8, max_travel_seconds: 915, top_k: 5, min_spacing_meters: 500 };
 
 test("POSTs all four origins without overriding backend defaults and preserves API rank", async (t) => {
@@ -28,7 +29,9 @@ test("POSTs all four origins without overriding backend defaults and preserves A
   const [url, request] = fetch.mock.calls[0].arguments;
   assert.equal(new URL(url).pathname, "/api/v1/meeting-points");
   assert.equal(request.method, "POST");
-  assert.deepEqual(JSON.parse(request.body), { origins, travel_mode: "car" });
+  assert.deepEqual(JSON.parse(request.body), {
+    origins, travel_mode: "car", optimization: { objective_type: objective.type },
+  });
   const preparedRoutes = Object.fromEntries(origins.map(({ id }) => [id, geometry]));
   assert.deepEqual(outcome, {
     status: "success", requestId: "cached", snaps: expectedSnaps,
@@ -42,20 +45,20 @@ test("POSTs selected fairness and travel limit without overriding other defaults
   const optimization = { phi: 0.8, max_travel_seconds: 915 };
   await findMeetingPoints(origins, new AbortController().signal, optimization);
   assert.deepEqual(JSON.parse(fetch.mock.calls[0].arguments[1].body), {
-    origins, travel_mode: "car", optimization,
+    origins, travel_mode: "car", optimization: { ...optimization, objective_type: objective.type },
   });
 });
 
 test("reads exact and lower-bound time hints for an empty result", async (t) => {
   const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({
-    request_id: "cached", status: "empty", origins: snaps, results: [], min_required_seconds: "> 3600",
+    request_id: "cached", status: "empty", objective, origins: snaps, results: [], min_required_seconds: "> 3600",
   }));
   const signal = new AbortController().signal;
   assert.deepEqual(await findMeetingPoints(origins, signal), {
     status: "empty", requestId: "cached", snaps: expectedSnaps, minimum: { seconds: 3600, lowerBound: true },
   });
   fetch.mock.mockImplementation(async () => Response.json({
-    request_id: "cached", status: "empty", origins: snaps, results: [], min_required_seconds: 302.5,
+    request_id: "cached", status: "empty", objective, origins: snaps, results: [], min_required_seconds: 302.5,
   }));
   assert.deepEqual(await findMeetingPoints(origins, signal), {
     status: "empty", requestId: "cached", snaps: expectedSnaps, minimum: { seconds: 302.5, lowerBound: false },
@@ -131,7 +134,9 @@ test("reranks from the cache ID using optimization alone", async (t) => {
   assert.equal(outcome.requestId, "cached");
   const [url, request] = fetch.mock.calls[0].arguments;
   assert.equal(new URL(url).pathname, "/api/v1/meeting-points/cached%2Fid/rerank");
-  assert.deepEqual(JSON.parse(request.body), { optimization });
+  assert.deepEqual(JSON.parse(request.body), {
+    optimization: { ...optimization, objective_type: objective.type },
+  });
 });
 
 test("recomputes once on rerank 409 with the same settings and returns the new cache ID", async (t) => {
@@ -143,7 +148,9 @@ test("recomputes once on rerank 409 with the same settings and returns the new c
   assert.equal(fetch.mock.calls.length, 2);
   const [url, request] = fetch.mock.calls[1].arguments;
   assert.equal(new URL(url).pathname, "/api/v1/meeting-points");
-  assert.deepEqual(JSON.parse(request.body), { origins, travel_mode: "car", optimization });
+  assert.deepEqual(JSON.parse(request.body), {
+    origins, travel_mode: "car", optimization: { ...optimization, objective_type: objective.type },
+  });
 });
 
 test("does not loop on failures or recompute after cancellation", async (t) => {

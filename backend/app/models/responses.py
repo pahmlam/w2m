@@ -57,6 +57,11 @@ class Objective(ContractModel):
     weights: list[float]
 
 
+class MeanSpreadObjective(ContractModel):
+    type: Literal["mean_spread_v1"] = "mean_spread_v1"
+    phi: Annotated[float, Field(ge=0, le=1)]
+
+
 class Timings(ContractModel):
     snap: Seconds
     dijkstra: Seconds
@@ -72,7 +77,7 @@ class MeetingResponse(ContractModel):
     weight_profile_version: str
     status: Literal["success", "empty"]
     unit: Literal["seconds"] = "seconds"
-    objective: Objective
+    objective: Annotated[Objective | MeanSpreadObjective, Field(discriminator="type")]
     origins: Annotated[list[SnappedOrigin], Field(min_length=4, max_length=4)]
     results: Annotated[list[MeetingResult], Field(max_length=5)]
     timings_ms: Timings

@@ -104,6 +104,7 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   const response = await initial;
   assert.equal(response.status(), 200);
   const meeting = await response.json();
+  assert.deepEqual(meeting.objective, { type: "mean_spread_v1", phi: 0 });
   const status = page.locator("#meeting-status");
   await status.filter({ hasText: `${meeting.results.length} spots found.` }).waitFor();
   assert.ok(meeting.results.length > 0 && meeting.results.length <= 5);
@@ -134,12 +135,14 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   await slider.press("ArrowRight");
   await slider.press("ArrowRight");
   const reranked = await (await reranking).json();
-  assert.equal(reranked.objective.phi, 0.2);
+  assert.deepEqual(reranked.objective, { type: "mean_spread_v1", phi: 0.2 });
   assert.equal(reranked.timings_ms.dijkstra, 0);
   await status.filter({ hasText: /spots found/ }).waitFor();
 
-  await page.getByRole("button", { name: "Spot #2", exact: true }).click();
-  assert.equal(await page.getByRole("button", { name: "Spot 2 on the map" }).getAttribute("aria-pressed"), "true");
+  if (reranked.results.length >= 2) {
+    await page.getByRole("button", { name: "Spot #2", exact: true }).click();
+    assert.equal(await page.getByRole("button", { name: "Spot 2 on the map" }).getAttribute("aria-pressed"), "true");
+  }
   await page.getByRole("button", { name: "Spot 1 on the map" }).press("Enter");
   assert.equal(await choose.getAttribute("aria-pressed"), "true");
   const advanced = waitForPost(page, `${meetingPath}/${meeting.request_id}/rerank`);

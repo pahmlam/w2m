@@ -270,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", default="http://127.0.0.1:8002")
     parser.add_argument("--requests", type=int, default=REQUEST_COUNT)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--objective-type", choices=("owa_geometric", "mean_spread_v1"),
+                        default="owa_geometric")
     args = parser.parse_args(argv)
     if args.requests < 1 or args.seed < 0:
         parser.error("Expected a positive request count and a non-negative seed")
@@ -288,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
         "started_at": datetime.now(UTC).isoformat(),
         "scope": "m6" if args.requests >= REQUEST_COUNT else "smoke",
         "seed": args.seed,
+        "objective_type": args.objective_type,
         "request_pairs": args.requests,
         "sequential_concurrency": 1,
         "burst_concurrency": CONCURRENT_COUNT,
@@ -309,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         snapper = CoordinateSnapper(graph, Settings(_env_file=None))
         cases = list(sample_requests(
             snapper, WARMUP_COUNT + args.requests + CONCURRENT_COUNT, args.seed,
+            objective_type=args.objective_type,
         ))
         with httpx.Client(
             base_url=args.base_url, timeout=120, trust_env=False,

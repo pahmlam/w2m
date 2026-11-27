@@ -8,7 +8,7 @@ from functools import partial
 from threading import Lock
 from time import perf_counter_ns
 
-from app.models.requests import MeetingRequest, Optimization
+from app.models.requests import MeetingOptimization, MeetingRequest, Optimization
 from app.models.responses import MeetingResult, Timings
 from app.services.coordinate_snapper import CoordinateSnapper, SnapResult
 from app.services.csr_shortest_path import CSRRoutingResult, route_csr_origins
@@ -144,6 +144,8 @@ class CSRMeetingService:
         }
         ranking = rank_candidates(
             routing, phi=optimization.phi, max_travel_seconds=optimization.max_travel_seconds,
+            objective_type=(optimization.objective_type
+                            if isinstance(optimization, MeetingOptimization) else "owa_geometric"),
         )
         selection_start = perf_counter_ns()
         selected = select_candidates(

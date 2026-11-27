@@ -19,6 +19,7 @@ W2M is a web app for finding fair, efficient meeting points for four people in H
 - Prepare/version OSM graph data offline; do not download OSM during normal requests or routine CI tests. Preserve map attribution. Do not log or persist precise user locations or secrets.
 - Reuse established project conventions and commands; do not assume tooling exists before inspecting the repository. Add or update focused tests for behavior changes, especially relevant `FR-*` and `TC-*` cases. Run applicable tests, lint, type checks, and builds; report failures and skipped checks accurately.
 - Update relevant documentation and milestone checkboxes only when actual implementation and verification evidence supports the change.
+- Whenever open another backend or frontend port to test, must close them after done.
 
 ## Code conventions
 

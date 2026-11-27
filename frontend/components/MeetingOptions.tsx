@@ -42,7 +42,7 @@ export default function MeetingOptions({ limits, values, onChange }: {
               onPhiChange(fairnessAtStep(Math.ceil(steps) - 1, limits.phi));
             }
           }} />
-        <div className="fairness-endpoints" id="fairness-endpoints"><span>Fastest for the group</span><span>Fairest</span></div>
+        <div className="fairness-endpoints" id="fairness-endpoints"><span>Shortest average time</span><span>Most similar travel times</span></div>
       </div>
       <div className="travel-controls">
         <strong>Max travel per person</strong>

@@ -15,14 +15,16 @@ export interface Optimization {
   min_spacing_meters: number;
 }
 
+export type ObjectiveType = "owa_geometric" | "mean_spread_v1";
+
 export interface MeetingRequest {
   origins: Origin[];
   travel_mode: "car";
-  optimization?: Partial<Optimization>;
+  optimization?: Partial<Optimization> & { objective_type?: ObjectiveType };
 }
 
 export interface RerankRequest {
-  optimization: Optimization;
+  optimization: Optimization & { objective_type?: ObjectiveType };
 }
 
 export type ErrorCode =
@@ -78,7 +80,8 @@ export interface MeetingResponse {
   weight_profile_version: string;
   status: "success" | "empty";
   unit: "seconds";
-  objective: { type: "owa_geometric"; phi: number; weights: number[] };
+  objective: { type: "owa_geometric"; phi: number; weights: number[] }
+    | { type: "mean_spread_v1"; phi: number };
   origins: SnappedOrigin[];
   results: MeetingResult[];
   timings_ms: {

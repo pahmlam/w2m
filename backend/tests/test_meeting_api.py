@@ -432,6 +432,49 @@ def test_request_logs_use_route_templates_and_safe_metadata(
                for value in position)
 
 
+def test_mean_spread_opt_in_preserves_objective_on_rerank(
+    meeting_client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="uvicorn.error.w2m")
+    body = {"origins": [
+        {"id": label, "lon": lon, "lat": lat}
+        for label, (lon, lat) in zip(ORIGIN_IDS, (
+            TO_WGS84.transform(500004, 2300000 - offset) for offset in (1, 2, 3, 4)
+        ), strict=True)
+    ]}
+    legacy = meeting_client.post(MEETING_URL, json=body)
+    assert legacy.json()["objective"]["type"] == "owa_geometric"
+
+    options = {"objective_type": "mean_spread_v1", "phi": 0}
+    initial = meeting_client.post(MEETING_URL, json={**body, "optimization": options})
+    assert initial.status_code == 200
+    payload = initial.json()
+    assert payload["objective"] == {"type": "mean_spread_v1", "phi": 0}
+    assert payload["results"][0]["avg_time"] == payload["results"][0]["score"]
+
+    def fail_if_routed(*args: object) -> None:
+        pytest.fail("Rerank must use cached paths")
+
+    monkeypatch.setattr(csr_shortest_path, "dijkstra", fail_if_routed)
+    path = f"{MEETING_URL}/{payload['request_id']}/rerank"
+    reranked = meeting_client.post(path, json={"optimization": {"phi": 1}})
+    assert reranked.status_code == 200
+    result = reranked.json()
+    assert result["objective"] == {"type": "mean_spread_v1", "phi": 1}
+    assert result["results"][0]["difference"] == result["results"][0]["score"]
+    assert result["timings_ms"]["dijkstra"] == 0
+    same_objective = meeting_client.post(path, json={"optimization": {**options, "phi": 1}})
+    assert same_objective.status_code == 200
+    conflict = meeting_client.post(path, json={"optimization": {"objective_type": "owa_geometric"}})
+    assert conflict.status_code == 409
+    assert conflict.json()["error_code"] == "RECOMPUTE_REQUIRED"
+    audit = [json.loads(record.getMessage().removeprefix("request ")) for record in caplog.records
+             if record.getMessage().startswith("request ")]
+    entry = next(record["meeting_result"] for record in audit
+                 if record["request_id"] == reranked.headers["X-Request-ID"])
+    assert entry["objective_type"] == "mean_spread_v1" and "owa_weights" not in entry
+
+
 @pytest.mark.parametrize(("lon", "lat", "code"), [
     (107.0, 20.8, "OUT_OF_COVERAGE"),
     (105.1, 20.8, "SNAP_FAILED"),

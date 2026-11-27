@@ -16,7 +16,7 @@ from scipy.spatial import cKDTree
 from shapely import covers, distance, get_coordinates, line_interpolate_point, points, transform
 
 from app.config.settings import Settings
-from app.models.requests import MeetingRequest, Optimization, Origin
+from app.models.requests import MeetingOptimization, MeetingRequest, ObjectiveType, Origin
 from app.models.responses import MeetingResult
 from app.services.area import METRIC_CRS, WGS84_CRS
 from app.services.coordinate_snapper import CoordinateSnapper
@@ -35,6 +35,7 @@ SCORE_TOLERANCE_TICKS = 1
 
 def sample_requests(
     snapper: CoordinateSnapper[CSRGraph], request_count: int, seed: int,
+    *, objective_type: ObjectiveType = "owa_geometric",
 ) -> Iterator[tuple[str, MeetingRequest]]:
     """Draw four sources from in-AOI road interiors in each spatial scenario."""
     aoi = snapper.reference.aoi
@@ -69,10 +70,10 @@ def sample_requests(
         ]
         yield scenario, MeetingRequest(
             origins=origins, travel_mode="car",
-            optimization=Optimization(
+            optimization=MeetingOptimization(
                 phi=int(rng.integers(11)) / 10,
                 max_travel_seconds=int(rng.choice((300, 900, 1800, 3600, 7200))),
-                top_k=5, min_spacing_meters=500,
+                top_k=5, min_spacing_meters=500, objective_type=objective_type,
             ),
         )
 

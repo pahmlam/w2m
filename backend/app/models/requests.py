@@ -10,6 +10,8 @@ from app.config.settings import (
     get_settings,
 )
 
+type ObjectiveType = Literal["owa_geometric", "mean_spread_v1"]
+
 
 class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
@@ -39,10 +41,21 @@ class Optimization(ContractModel):
     ] = Field(default_factory=lambda: get_settings().default_min_spacing_meters)
 
 
+class MeetingOptimization(Optimization):
+    objective_type: ObjectiveType = "owa_geometric"
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_base_options(cls, value: object) -> object:
+        if isinstance(value, Optimization) and not isinstance(value, cls):
+            return value.model_dump()
+        return value
+
+
 class MeetingRequest(ContractModel):
     origins: Annotated[list[Origin], Field(min_length=4, max_length=4)]
     travel_mode: Literal["car"] = "car"
-    optimization: Optimization = Field(default_factory=Optimization)
+    optimization: MeetingOptimization = Field(default_factory=MeetingOptimization)
 
     @model_validator(mode="after")
     def unique_origin_ids(self) -> "MeetingRequest":
@@ -52,4 +65,4 @@ class MeetingRequest(ContractModel):
 
 
 class RerankRequest(ContractModel):
-    optimization: Optimization
+    optimization: MeetingOptimization

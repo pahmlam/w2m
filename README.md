@@ -275,13 +275,17 @@ bỏ URL thô, query, header, body, ID cache rerank và nội dung ngoại lệ.
 và development tắt access log mặc định của Uvicorn.
 
 Sau mỗi lần tìm điểm gặp hoặc xếp hạng lại, trường `meeting_result` ghi trạng thái,
-tham số tối ưu thực tế, trọng số OWA và các điểm đã trả theo thứ hạng. Mỗi điểm có
-điểm OWA, thống kê thời gian và thời gian tiếp cận, trên đường và tổng của từng tuyến.
+tham số tối ưu thực tế, `objective_type` và các điểm đã trả theo thứ hạng.
+Mỗi điểm có điểm xếp hạng, thống kê thời gian và thời gian tiếp cận, trên đường và
+tổng của từng tuyến. Bản ghi OWA có thêm `owa_weights`.
 Hai mảng `travel_times_seconds` và `routes` cùng theo thứ tự vị trí trong request.
 Khi kết quả rỗng, log có `results: []` và `min_required_seconds`.
 Log chỉ dùng số liệu tính toán đã trả về API và không chứa tọa độ, ID node, ID nguồn
-hay hình học tuyến. Có thể dùng log để tính lại điểm OWA từ trọng số và thời gian đã
-ghi, đối chiếu tổng thời gian của tuyến và kiểm tra ngưỡng thời gian theo độ chính xác API.
+hay hình học tuyến. Có thể dùng log để đối chiếu tổng thời gian của tuyến và kiểm tra
+điểm theo mục tiêu đã ghi. Giao diện dùng `mean_spread_v1`, tính điểm từ trung bình
+và chênh lệch sau khi lọc Pareto. API mặc định `owa_geometric` nếu client bỏ qua
+`optimization.objective_type`. Xem hợp đồng [P3.0](docs/spec/W2M-P3.0-Contract-Addendum.md).
+Số liệu log đã làm tròn theo API.
 Để tái hiện đường đi, dùng một bộ tọa độ thử nghiệm biết trước với đúng phiên bản đồ thị.
 Khi chạy trực tiếp theo lệnh development, xem bản ghi trong `backend/data/logs/backend-dev.log`.
 Khi chạy bằng Docker, dùng `docker compose logs -f --timestamps backend`.
@@ -536,7 +540,8 @@ trong backend và thời gian HTTP gồm cả dựng tuyến, serialize và đ�
 P95 HTTP được đối chiếu với mốc 5 giây và 300 ms. Cache dùng số byte hạch toán
 của ứng dụng. Bộ nhớ container dùng đỉnh tích lũy từ cgroup v2 (`memory.peak`).
 Nếu một điều kiện kiểm tra không đạt, CLI vẫn ghi báo cáo và trả mã thoát 1.
-Dùng `--requests 6` để chạy smoke test trước khi đo nghiệm thu.
+Dùng `--requests 6` để chạy smoke test trước khi đo nghiệm thu. Thêm
+`--objective-type mean_spread_v1` để đo mục tiêu xếp hạng của giao diện Phase 3.
 
 ---
 

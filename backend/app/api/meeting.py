@@ -11,11 +11,12 @@ from app.config.settings import (
     PHI_BOUNDS,
     TOP_K_BOUNDS,
 )
-from app.models.requests import Location, MeetingRequest, Optimization, RerankRequest
+from app.models.requests import Location, MeetingOptimization, MeetingRequest, RerankRequest
 from app.models.responses import (
     ErrorResponse,
     MapConfig,
     MapDefaults,
+    MeanSpreadObjective,
     MeetingResponse,
     Objective,
     ParameterLimits,
@@ -44,7 +45,7 @@ def unavailable(request: Request) -> JSONResponse:
 
 
 def _meeting_response(
-    request_id: str, computation: CSRMeetingComputation, optimization: Optimization,
+    request_id: str, computation: CSRMeetingComputation, optimization: MeetingOptimization,
 ) -> MeetingResponse:
     graph = computation.routing.graph
     origins = [SnappedOrigin(
@@ -59,7 +60,10 @@ def _meeting_response(
         graph_version=graph.graph_version,
         weight_profile_version=graph.weight_profile_version,
         status="empty" if empty else "success",
-        objective=Objective(phi=optimization.phi, weights=list(computation.objective_weights)),
+        objective=(MeanSpreadObjective(phi=optimization.phi)
+                   if optimization.objective_type == "mean_spread_v1" else Objective(
+                       phi=optimization.phi, weights=list(computation.objective_weights),
+                   )),
         origins=origins,
         results=computation.results,
         timings_ms=computation.timings_ms,
@@ -70,14 +74,16 @@ def _meeting_response(
 
 
 def _record_meeting_result(
-    request: Request, response: MeetingResponse, optimization: Optimization,
+    request: Request, response: MeetingResponse, optimization: MeetingOptimization,
 ) -> None:
     # Positions follow request order so the log can correlate times without storing origin IDs.
     request.state.meeting_timings = response.timings_ms
     request.state.meeting_result = {
         "status": response.status,
-        "optimization": optimization.model_dump(),
-        "owa_weights": response.objective.weights,
+        "optimization": optimization.model_dump(exclude={"objective_type"}),
+        "objective_type": response.objective.type,
+        **({"owa_weights": response.objective.weights}
+           if isinstance(response.objective, Objective) else {}),
         "min_required_seconds": response.min_required_seconds,
         "results": [
             {
@@ -121,7 +127,9 @@ async def meeting_points(body: MeetingRequest, request: Request) -> MeetingRespo
         return JSONResponse(status_code=422, content=error.model_dump())
 
     response = _meeting_response(uuid4().hex, computation, body.optimization)
-    request.app.state.meeting_routing_cache.put(response.request_id, computation.routing)
+    request.app.state.meeting_routing_cache.put(
+        response.request_id, computation.routing, objective_type=body.optimization.objective_type,
+    )
     _record_meeting_result(request, response, body.optimization)
     return response
 
@@ -137,9 +145,13 @@ async def rerank(
     if graph is None or service is None:
         return unavailable(request)
 
-    routing = request.app.state.meeting_routing_cache.get(request_id)
+    cached = request.app.state.meeting_routing_cache.get_request(request_id)
+    routing, objective_type = cached if cached is not None else (None, None)
+    optimization = body.optimization
     if (routing is None or routing.graph is not graph
-            or body.optimization.max_travel_seconds > routing.max_travel_seconds):
+            or optimization.max_travel_seconds > routing.max_travel_seconds
+            or ("objective_type" in optimization.model_fields_set
+                and optimization.objective_type != objective_type)):
         error = ErrorResponse(
             error_code="RECOMPUTE_REQUIRED",
             message="Cần tính lại điểm gặp với các tham số hiện tại.",
@@ -147,9 +159,10 @@ async def rerank(
         )
         return JSONResponse(status_code=409, content=error.model_dump())
 
-    computation = await service.rerank(routing, body.optimization)
-    response = _meeting_response(request_id, computation, body.optimization)
-    _record_meeting_result(request, response, body.optimization)
+    optimization = optimization.model_copy(update={"objective_type": objective_type})
+    computation = await service.rerank(routing, optimization)
+    response = _meeting_response(request_id, computation, optimization)
+    _record_meeting_result(request, response, optimization)
     return response
 
 

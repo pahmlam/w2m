@@ -9,8 +9,9 @@ from time import perf_counter_ns
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy.spatial import cKDTree
 
-from app.models.requests import Location
+from app.models.requests import Location, ObjectiveType
 from app.models.responses import MeetingResult
 from app.services.csr_shortest_path import CSRRoutingResult
 from app.services.objective import ScoredCandidate, owa_weights, quantize_seconds, score_candidate
@@ -18,6 +19,9 @@ from app.services.route_builder import build_csr_route, build_route
 
 if TYPE_CHECKING:
     from app.services.shortest_path import RoutingResult
+
+PARETO_SWEEP_COUNT = 16
+PARETO_TREE_LEAF_SIZE = 24
 
 
 @dataclass(frozen=True, eq=False)
@@ -28,6 +32,7 @@ class _CSRScoredCandidates:
     scores: np.ndarray
     averages: np.ndarray
     order: np.ndarray
+    differences: np.ndarray | None = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, _CSRScoredCandidates):
@@ -36,14 +41,20 @@ class _CSRScoredCandidates:
             (self.node_ids, other.node_ids), (self.raw_times, other.raw_times),
             (self.travel_times, other.travel_times), (self.scores, other.scores),
             (self.averages, other.averages),
-        ))
+        )) and (
+            self.differences is None and other.differences is None
+            or self.differences is not None and other.differences is not None
+            and np.array_equal(self.differences[self.order], other.differences[other.order])
+        )
 
     def candidate(self, row: int | np.integer) -> ScoredCandidate:
         times = tuple(self.travel_times[row].tolist())
         maximum, minimum = max(times), min(times)
         return ScoredCandidate(
             int(self.node_ids[row]), tuple(self.raw_times[row].tolist()), times,
-            float(self.scores[row]), maximum, minimum, quantize_seconds(maximum - minimum),
+            float(self.scores[row]), maximum, minimum,
+            (float(self.differences[row]) if self.differences is not None
+             else quantize_seconds(maximum - minimum)),
             float(self.averages[row]),
         )
 
@@ -83,6 +94,7 @@ def _candidate_network_times(
 def _scan_csr_candidates(
     routing: CSRRoutingResult, access_times: tuple[float, ...],
     network_limits: tuple[float, ...], travel_limit: float, weights: tuple[float, ...],
+    phi: float,
 ) -> tuple[_CSRScoredCandidates, int]:
     mappings = routing.graph.mappings
     indices = np.flatnonzero(mappings["in_aoi"] & mappings["is_candidate"])
@@ -99,6 +111,9 @@ def _scan_csr_candidates(
         valid &= np.all(network_times <= network_limits, axis=1)
     node_ids = mappings["node_ids"][indices[valid]]
     raw_times = raw_times[valid]
+    if not weights:
+        return _score_csr_mean_spread(node_ids, raw_times, phi)
+
     travel_times = (np.rint(10 * raw_times) + 0.0) / 10
     sorted_raw = np.sort(raw_times, axis=1)[:, ::-1]
     sorted_times = np.rint(10 * sorted_raw) / 10
@@ -119,12 +134,121 @@ def _scan_csr_candidates(
     return scored, rank_started
 
 
+def _pareto_rows(times: np.ndarray) -> np.ndarray:
+    # Low sums discard many candidates early. Lexicographic ties ensure every
+    # possible dominator precedes its target, even when their float sums tie.
+    pending = np.lexsort((*times.T[::-1], times.sum(axis=1)))
+    kept = []
+    for _ in range(PARETO_SWEEP_COUNT):
+        if not pending.size:
+            return np.asarray(kept, dtype=np.intp)
+        row = pending[0]
+        kept.append(row)
+        pending = pending[1:]
+        pending = pending[~_dominated_by(times[pending], times[row])]
+    if not pending.size:
+        return np.asarray(kept, dtype=np.intp)
+    return np.concatenate((kept, pending[_pareto_tree_mask(times[pending])]))
+
+
+def _dominated_by(times: np.ndarray, lower: np.ndarray) -> np.ndarray:
+    return np.all(times >= lower, axis=1) & np.any(times > lower, axis=1)
+
+
+def _pareto_tree_mask(times: np.ndarray) -> np.ndarray:
+    """Search remaining vectors for strict dominators using subtree bounds."""
+    tree = cKDTree(times, leafsize=PARETO_TREE_LEAF_SIZE)
+    alive = np.ones(len(times), dtype=bool)
+
+    def visit(node, rows: np.ndarray) -> None:
+        rows = rows[alive[rows]]
+        if not rows.size:
+            return
+        points = node.data_points
+        # A dominator in this subtree must fit below the query on every axis.
+        rows = rows[np.all(times[rows] >= points.min(axis=0), axis=1)]
+        if not rows.size:
+            return
+        if node.split_dim < 0:
+            # An unsplittable leaf can contain many copies of one vector.
+            if len(points) > PARETO_TREE_LEAF_SIZE:
+                points = np.unique(points, axis=0)
+            for point in points:
+                dominated = _dominated_by(times[rows], point)
+                alive[rows[dominated]] = False
+                rows = rows[~dominated]
+                if not rows.size:
+                    return
+            return
+
+        # A query strictly above the upper bound is dominated by every point in the subtree.
+        dominated = _dominated_by(times[rows], points.max(axis=0))
+        alive[rows[dominated]] = False
+        rows = rows[~dominated]
+        visit(node.lesser, rows)
+        visit(node.greater, rows)
+
+    visit(tree.tree, np.arange(len(times)))
+    return alive
+
+
+def _score_csr_mean_spread(
+    node_ids: np.ndarray, raw_times: np.ndarray, phi: float,
+) -> tuple[_CSRScoredCandidates, int]:
+    keep = _pareto_rows(raw_times)
+    node_ids, raw_times = node_ids[keep], raw_times[keep]
+    sorted_raw = np.sort(raw_times, axis=1)[:, ::-1]
+    averages = np.fromiter(map(fsum, raw_times.tolist()), dtype=np.float64,
+                           count=len(node_ids)) / raw_times.shape[1]
+    differences = sorted_raw[:, 0] - sorted_raw[:, -1]
+    scores = (1 - phi) * averages + phi * differences
+    rank_started = perf_counter_ns()
+    order = np.lexsort((node_ids, *sorted_raw.T[::-1], differences, averages, scores))
+    return _CSRScoredCandidates(
+        node_ids, raw_times, np.rint(10 * raw_times) / 10, np.rint(10 * scores) / 10,
+        np.rint(10 * averages) / 10, order, np.rint(10 * differences) / 10,
+    ), rank_started
+
+
+def rank_mean_spread_reference(
+    candidates: list[tuple[int, tuple[float, ...]]], phi: float,
+) -> tuple[ScoredCandidate, ...]:
+    """Rank eligible raw times with a direct pairwise Pareto reference."""
+    frontier: list[tuple[float, ...]] = []
+    ordered = []
+    # Every possible dominator precedes its target when ordered by raw time vector.
+    for node, times in sorted(candidates, key=lambda item: item[1]):
+        if any(other != times and all(a <= b for a, b in zip(other, times, strict=True))
+               for other in frontier):
+            continue
+        if not frontier or frontier[-1] != times:
+            frontier.append(times)
+        average = fsum(times) / len(times)
+        minimum, maximum = min(times), max(times)
+        difference = maximum - minimum
+        score = (1 - phi) * average + phi * difference
+        candidate = ScoredCandidate(
+            node, times, tuple(map(quantize_seconds, times)), quantize_seconds(score),
+            quantize_seconds(maximum), quantize_seconds(minimum), quantize_seconds(difference),
+            quantize_seconds(average),
+        )
+        key = (score, average, difference, tuple(sorted(times, reverse=True)), node)
+        ordered.append((key, candidate))
+    return tuple(candidate for _, candidate in sorted(ordered, key=lambda item: item[0]))
+
+
 def rank_candidates[RoutingT: (RoutingResult, CSRRoutingResult)](
     routing: RoutingT, *, phi: float, max_travel_seconds: float,
+    objective_type: ObjectiveType = "owa_geometric",
 ) -> CandidateRanking[RoutingT]:
     """Reuse raw distances without rerouting or accepting an uncomputed cutoff."""
     sources = routing.sources
-    weights = owa_weights(phi, len(sources))
+    if objective_type == "mean_spread_v1":
+        if isinstance(phi, bool) or not isfinite(phi) or not 0 <= phi <= 1 or not sources:
+            raise ValueError("Expected phi within [0, 1] and at least one source")
+        weights = ()
+    else:
+        weights = owa_weights(phi, len(sources))
     ids = tuple(source.snap.origin_id for source in sources)
     if len(set(ids)) != len(ids):
         raise ValueError("Source IDs must be unique")
@@ -147,14 +271,14 @@ def rank_candidates[RoutingT: (RoutingResult, CSRRoutingResult)](
     scan_start = perf_counter_ns()
     if isinstance(routing, CSRRoutingResult):
         scored, rank_start = _scan_csr_candidates(
-            routing, access_times, network_limits, max_travel_seconds, weights,
+            routing, access_times, network_limits, max_travel_seconds, weights, phi,
         )
         return CandidateRanking(
             routing, ids, phi, max_travel_seconds, weights, scored,
             (rank_start - scan_start) / 1e6, (perf_counter_ns() - rank_start) / 1e6,
         )
 
-    candidates = []
+    eligible = []
     for node, network_times in _candidate_network_times(routing):
         if any(value < 0 for value in network_times):
             raise ValueError("Network travel times cannot be negative")
@@ -162,10 +286,18 @@ def rank_candidates[RoutingT: (RoutingResult, CSRRoutingResult)](
                           for access, value in zip(access_times, network_times, strict=True))
         if any(not isfinite(value) or value > max_travel_seconds for value in raw_times):
             continue
-        candidates.append(score_candidate(node, raw_times, weights))
+        if not weights and any(value > limit for value, limit in zip(
+            network_times, network_limits, strict=True,
+        )):
+            continue
+        eligible.append((node, raw_times))
+    if weights:
+        candidates = [score_candidate(node, raw_times, weights) for node, raw_times in eligible]
     rank_start = perf_counter_ns()
-    candidates.sort(key=lambda candidate: candidate.sort_key)
-    ordered = tuple(candidates)
+    if weights:
+        ordered = tuple(sorted(candidates, key=lambda candidate: candidate.sort_key))
+    else:
+        ordered = rank_mean_spread_reference(eligible, phi)
     return CandidateRanking(
         routing, ids, phi, max_travel_seconds, weights, ordered,
         (rank_start - scan_start) / 1e6, (perf_counter_ns() - rank_start) / 1e6,
