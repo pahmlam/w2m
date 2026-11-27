@@ -159,6 +159,28 @@ test("real meeting flow places sources, toggles routes, reranks and recalculates
   assert.ok(advancedBody.results.length <= 2);
   await status.filter({ hasText: /spots found/ }).waitFor();
 
+  const switchToOwa = waitForPost(page);
+  await page.getByRole("button", { name: "Mode · Similar travel times" }).press("Enter");
+  const owa = await (await switchToOwa).json();
+  assert.equal(owa.objective.type, "owa_geometric");
+  assert.equal(owa.objective.phi, 0.2);
+  assert.equal(await slider.inputValue(), "0.2");
+  await status.filter({ hasText: /spots found/ }).waitFor();
+
+  const rerankOwa = waitForPost(page, `${meetingPath}/${owa.request_id}/rerank`);
+  await slider.press("ArrowRight");
+  const rerankedOwa = await (await rerankOwa).json();
+  assert.equal(rerankedOwa.objective.type, "owa_geometric");
+  assert.equal(rerankedOwa.objective.phi, 0.3);
+  assert.equal(rerankedOwa.timings_ms.dijkstra, 0);
+  await status.filter({ hasText: /spots found/ }).waitFor();
+
+  const switchToMeanSpread = waitForPost(page);
+  await page.getByRole("button", { name: "Mode · Prioritize longest trip" }).click();
+  assert.deepEqual((await (await switchToMeanSpread).json()).objective, { type: "mean_spread_v1", phi: 0.3 });
+  assert.equal(await slider.inputValue(), "0.3");
+  await status.filter({ hasText: /spots found/ }).waitFor();
+
   await selectPerson(page, "D");
   const latitude = page.getByRole("textbox", { name: "Latitude" });
   const previous = await latitude.inputValue();

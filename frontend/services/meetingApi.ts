@@ -1,10 +1,10 @@
 import type {
-  Location, MapConfig, MeetingRequest, MeetingResult, Optimization, Origin, ParameterRange,
+  Location, MapConfig, MeetingRequest, MeetingResult, ObjectiveType, Optimization, Origin, ParameterRange,
   RerankRequest, Route, SnappedOrigin,
 } from "../types/meeting";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
-const W2M_OBJECTIVE = "mean_spread_v1";
+export const DEFAULT_MEETING_OBJECTIVE: ObjectiveType = "mean_spread_v1";
 
 export type OriginSnap = SnappedOrigin & { input: Location };
 
@@ -134,10 +134,10 @@ function parseSnaps(value: unknown, origins: Origin[]): OriginSnap[] {
   });
 }
 
-function parseOutcome(payload: unknown, origins: Origin[]): MeetingOutcome {
+function parseOutcome(payload: unknown, origins: Origin[], objectiveType: ObjectiveType): MeetingOutcome {
   if (!isObject(payload) || !Array.isArray(payload.results)) throw new Error(INVALID_MEETING_RESPONSE);
   const objective = payload.objective;
-  if (!isObject(objective) || objective.type !== W2M_OBJECTIVE
+  if (!isObject(objective) || objective.type !== objectiveType
     || !isNonnegativeNumber(objective.phi) || objective.phi > 1) {
     throw new Error(INVALID_MEETING_RESPONSE);
   }
@@ -224,7 +224,7 @@ async function postMeeting(
     }
     const payload: unknown = await response.json();
     requestSignal.throwIfAborted();
-    return parseOutcome(payload, origins);
+    return parseOutcome(payload, origins, body.optimization?.objective_type ?? DEFAULT_MEETING_OBJECTIVE);
   } catch (error) {
     if (timeout.aborted && requestSignal.reason === timeout.reason) {
       throw new Error("The search took too long. Try again.");
@@ -236,19 +236,20 @@ async function postMeeting(
 }
 
 export function findMeetingPoints(
-  origins: Origin[], signal: AbortSignal, optimization?: Partial<Optimization>,
+  origins: Origin[], signal: AbortSignal, optimization?: MeetingRequest["optimization"],
 ): Promise<MeetingOutcome> {
   return postMeeting("", {
-    origins, travel_mode: "car", optimization: { ...optimization, objective_type: W2M_OBJECTIVE },
+    origins, travel_mode: "car",
+    optimization: { ...optimization, objective_type: optimization?.objective_type ?? DEFAULT_MEETING_OBJECTIVE },
   }, origins, signal);
 }
 
 export async function rerankMeetingPoints(
-  requestId: string, origins: Origin[], optimization: Optimization, signal: AbortSignal,
+  requestId: string, origins: Origin[], optimization: RerankRequest["optimization"], signal: AbortSignal,
 ): Promise<MeetingOutcome> {
   try {
     return await postMeeting(`/${encodeURIComponent(requestId)}/rerank`, {
-      optimization: { ...optimization, objective_type: W2M_OBJECTIVE },
+      optimization: { ...optimization, objective_type: optimization.objective_type ?? DEFAULT_MEETING_OBJECTIVE },
     }, origins, signal);
   } catch (error) {
     if (!(error instanceof RecomputeRequired)) throw error;

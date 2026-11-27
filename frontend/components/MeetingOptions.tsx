@@ -1,14 +1,17 @@
 import type { MeetingMapConfig } from "@/services/meetingApi";
+import type { ObjectiveType } from "@/types/meeting";
 import { FAIRNESS_STEP, fairnessAtStep, parseSpacing, parseTravelLimit } from "@/utils/meetingOptions";
 
 const fairnessNumber = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 20 });
 
 interface OptionValues { phi: number; time: string; count: number; spacing: string }
 
-export default function MeetingOptions({ limits, values, onChange }: {
+export default function MeetingOptions({ limits, values, onChange, objectiveType, onToggleObjective }: {
   limits: MeetingMapConfig["limits"];
   values: OptionValues;
   onChange: (values: OptionValues) => void;
+  objectiveType: ObjectiveType;
+  onToggleObjective: () => void;
 }) {
   const { phi, time: timeInput, count, spacing } = values;
   const onPhiChange = (value: number) => onChange({ ...values, phi: value });
@@ -42,7 +45,10 @@ export default function MeetingOptions({ limits, values, onChange }: {
               onPhiChange(fairnessAtStep(Math.ceil(steps) - 1, limits.phi));
             }
           }} />
-        <div className="fairness-endpoints" id="fairness-endpoints"><span>Shortest average time</span><span>Most similar travel times</span></div>
+        <div className="fairness-endpoints" id="fairness-endpoints"><span>Shortest average time</span><span>More fairness</span></div>
+        <button className="fairness-mode" type="button" title="Switch fairness mode" onClick={onToggleObjective}>
+          {objectiveType === "owa_geometric" ? "Mode · Prioritize longest trip" : "Mode · Similar travel times"}
+        </button>
       </div>
       <div className="travel-controls">
         <strong>Max travel per person</strong>

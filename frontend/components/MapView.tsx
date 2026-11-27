@@ -11,9 +11,10 @@ import RouteLayer from "@/components/RouteLayer";
 import SnapDetails from "@/components/SnapDetails";
 import SnapLayer from "@/components/SnapLayer";
 import {
-  findMeetingPoints, loadMapConfig, rerankMeetingPoints, type MeetingMapConfig, type MeetingOutcome,
+  DEFAULT_MEETING_OBJECTIVE, findMeetingPoints, loadMapConfig, rerankMeetingPoints,
+  type MeetingMapConfig, type MeetingOutcome,
 } from "@/services/meetingApi";
-import type { Location, Optimization } from "@/types/meeting";
+import type { Location, ObjectiveType, Optimization } from "@/types/meeting";
 import { basemapSettings, outsideAoiMask } from "@/utils/basemap";
 import { coordinateBounds, ORIGIN_COLORS, formatMinutes } from "@/utils/meetingDisplay";
 import { parseTravelLimit, parseSpacing } from "@/utils/meetingOptions";
@@ -58,7 +59,7 @@ export default function MapView() {
   const dock = useRef<HTMLElement>(null);
   const pendingMeeting = useRef<AbortController>(null);
   const queuedRerank = useRef<number>(null);
-  const cachedRequestId = useRef<string>(null);
+  const cachedRequest = useRef<{ id: string; objectiveType: ObjectiveType }>(null);
   const [mapRuntime, setMapRuntime] = useState<{ map: Map; MarkerClass: typeof Marker }>();
   const [mapError, setMapError] = useState("");
   const [coverage, setCoverage] = useState<Coverage>({ status: "loading" });
@@ -74,6 +75,7 @@ export default function MapView() {
   const [changedTime, setChangedTime] = useState<string>();
   const [changedCount, setChangedCount] = useState<number>();
   const [changedSpacing, setChangedSpacing] = useState<string>();
+  const [objectiveType, setObjectiveType] = useState<ObjectiveType>(DEFAULT_MEETING_OBJECTIVE);
   const visibleSnaps = search.status === "result" && !search.stale ? search.outcome.snaps : null;
   const visibleMeetings = search.status === "result" && !search.stale && search.outcome.status === "success"
     ? search.outcome.results : null;
@@ -131,7 +133,7 @@ export default function MapView() {
     }
     const previous = locations[id];
     if (previous?.lat !== position.lat || previous.lon !== position.lon) {
-      cachedRequestId.current = null;
+      cachedRequest.current = null;
       invalidateSearch();
       setLocations((current) => ({ ...current, [id]: position }));
     }
@@ -167,7 +169,9 @@ export default function MapView() {
     }
   });
 
-  async function calculateMeeting(optimization: Optimization, requestId?: string) {
+  async function calculateMeeting(
+    settings: Optimization, requestId?: string, objective: ObjectiveType = objectiveType,
+  ) {
     if (!config || draft !== null || pendingMeeting.current) return;
     const { aoi } = config;
     const origins = ORIGIN_IDS.flatMap((id) => {
@@ -184,11 +188,12 @@ export default function MapView() {
     }
     setSearch({ status: "loading", reranking: requestId !== undefined });
     try {
+      const optimization = { ...settings, objective_type: objective };
       const outcome = requestId
         ? await rerankMeetingPoints(requestId, origins, optimization, request.signal)
         : await findMeetingPoints(origins, request.signal, optimization);
       if (!request.signal.aborted) {
-        cachedRequestId.current = outcome.requestId;
+        cachedRequest.current = { id: outcome.requestId, objectiveType: objective };
         setSelectedNodeId((current) => {
           if (outcome.status !== "success") return null;
           if (requestId && outcome.results.some((result) => result.node_id === current)) return current;
@@ -209,19 +214,29 @@ export default function MapView() {
   }
 
   function scheduleRerank(values: NonNullable<typeof options>) {
+    const cached = cachedRequest.current;
+    const shouldRefresh = cached || pendingMeeting.current || queuedRerank.current !== null;
     invalidateSearch();
-    const requestId = cachedRequestId.current;
     const next = readOptions(values);
-    if (!requestId || draft !== null || !next) return;
+    if (!shouldRefresh || draft !== null || !next) return;
+    const requestId = cached?.objectiveType === objectiveType ? cached.id : undefined;
     queuedRerank.current = window.setTimeout(() => {
       queuedRerank.current = null;
       void calculateMeeting(next, requestId);
     }, RERANK_DEBOUNCE_MS);
   }
 
+  function toggleObjective() {
+    const next = objectiveType === "mean_spread_v1" ? "owa_geometric" : "mean_spread_v1";
+    const shouldRefresh = cachedRequest.current || pendingMeeting.current || queuedRerank.current !== null;
+    setObjectiveType(next);
+    invalidateSearch();
+    if (shouldRefresh && canFindMeeting) void calculateMeeting(optimization, undefined, next);
+  }
+
   function resetLocations() {
     invalidateSearch();
-    cachedRequestId.current = null;
+    cachedRequest.current = null;
     setLocations({});
     setSelected("A");
     setDraft(null);
@@ -453,13 +468,14 @@ export default function MapView() {
         </section>
         <section className="search-dock" aria-label="Search options" ref={dock}>
           {config && options && (
-            <MeetingOptions limits={config.limits} values={options} onChange={(next) => {
-              setChangedPhi(next.phi);
-              setChangedTime(next.time);
-              setChangedCount(next.count);
-              setChangedSpacing(next.spacing);
-              scheduleRerank(next);
-            }} />
+            <MeetingOptions limits={config.limits} values={options} objectiveType={objectiveType}
+              onToggleObjective={toggleObjective} onChange={(next) => {
+                setChangedPhi(next.phi);
+                setChangedTime(next.time);
+                setChangedCount(next.count);
+                setChangedSpacing(next.spacing);
+                scheduleRerank(next);
+              }} />
           )}
           {placedCount === ORIGIN_IDS.length && draft && <p>Save the coordinates before finding a spot.</p>}
           {options && !optimization && <p className="origin-error">Check the travel limit and minimum spacing.</p>}

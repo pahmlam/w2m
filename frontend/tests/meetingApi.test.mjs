@@ -140,17 +140,21 @@ test("reranks from the cache ID using optimization alone", async (t) => {
 });
 
 test("recomputes once on rerank 409 with the same settings and returns the new cache ID", async (t) => {
-  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ ...success, request_id: "new" }));
+  const selected = { ...optimization, objective_type: "owa_geometric" };
+  const owa = { type: selected.objective_type, phi: selected.phi, weights: [0.73, 0.2, 0.06, 0.01] };
+  const fetch = t.mock.method(globalThis, "fetch", async () =>
+    Response.json({ ...success, request_id: "new", objective: owa }));
   fetch.mock.mockImplementationOnce(async () => new Response(null, { status: 409 }));
   const signal = new AbortController().signal;
-  const outcome = await rerankMeetingPoints("cached", origins, optimization, signal);
+  const outcome = await rerankMeetingPoints("cached", origins, selected, signal);
   assert.equal(outcome.requestId, "new");
   assert.equal(fetch.mock.calls.length, 2);
   const [url, request] = fetch.mock.calls[1].arguments;
   assert.equal(new URL(url).pathname, "/api/v1/meeting-points");
   assert.deepEqual(JSON.parse(request.body), {
-    origins, travel_mode: "car", optimization: { ...optimization, objective_type: objective.type },
+    origins, travel_mode: "car", optimization: selected,
   });
+  assert.deepEqual(JSON.parse(fetch.mock.calls[0].arguments[1].body), { optimization: selected });
 });
 
 test("does not loop on failures or recompute after cancellation", async (t) => {

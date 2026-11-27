@@ -237,6 +237,9 @@ npm --prefix frontend run dev
 Trang chính tải AOI từ `GET /api/v1/map/config` và căn bản đồ theo phạm vi này.
 Nếu graph chưa sẵn sàng, bấm **Try again** sau khi `GET /ready` trả 200.
 Đặt đủ bốn vị trí A–D rồi bấm **Find a spot** để xem danh sách theo thứ hạng từ backend.
+Bấm nút **Mode** bên dưới slider để chuyển giữa ưu tiên thời gian đi gần nhau và
+ưu tiên người đi lâu nhất. Khi đã có lượt tìm, đổi chế độ cập nhật kết quả với
+cùng giá trị `phi`.
 
 ### Bản đồ nền local
 
@@ -282,8 +285,8 @@ Hai mảng `travel_times_seconds` và `routes` cùng theo thứ tự vị trí t
 Khi kết quả rỗng, log có `results: []` và `min_required_seconds`.
 Log chỉ dùng số liệu tính toán đã trả về API và không chứa tọa độ, ID node, ID nguồn
 hay hình học tuyến. Có thể dùng log để đối chiếu tổng thời gian của tuyến và kiểm tra
-điểm theo mục tiêu đã ghi. Giao diện dùng `mean_spread_v1`, tính điểm từ trung bình
-và chênh lệch sau khi lọc Pareto. API mặc định `owa_geometric` nếu client bỏ qua
+điểm theo mục tiêu đã ghi. Giao diện mặc định `mean_spread_v1` và có thể chuyển sang
+`owa_geometric`. API mặc định `owa_geometric` nếu client bỏ qua
 `optimization.objective_type`. Xem hợp đồng [P3.0](docs/spec/W2M-P3.0-Contract-Addendum.md).
 Số liệu log đã làm tròn theo API.
 Để tái hiện đường đi, dùng một bộ tọa độ thử nghiệm biết trước với đúng phiên bản đồ thị.
